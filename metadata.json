@@ -1,0 +1,5 @@
+{
+  "name": "Katje Colorizer",
+  "description": "A high-precision image colorization tool using Google Gemini and Imagen models. Features queue management, auto-naming, and detailed console logging.",
+  "requestFramePermissions": []
+}
