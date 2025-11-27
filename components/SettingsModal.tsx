@@ -7,10 +7,11 @@ interface SettingsModalProps {
   onClose: () => void;
   settings: AppSettings;
   onUpdate: (newSettings: AppSettings) => void;
-  onChangeApiKey: () => void;
+  apiKey: string;
+  onApiKeyChange: (key: string) => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings, onUpdate, onChangeApiKey }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings, onUpdate, apiKey, onApiKeyChange }) => {
   if (!isOpen) return null;
 
   return (
@@ -95,17 +96,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                <Key size={16} />
                API Configuration
              </h3>
-             <div className="flex items-center justify-between bg-black/30 p-4 rounded-lg border border-gray-600">
+             <div className="bg-black/30 p-4 rounded-lg border border-gray-600 space-y-3">
                <div>
                  <p className="text-sm font-medium text-gray-200">Google Cloud API Key</p>
-                 <p className="text-xs text-gray-500">Required for Gemini and Imagen models</p>
+                 <p className="text-xs text-gray-500">Required for Gemini and Imagen models.</p>
                </div>
-               <button 
-                 onClick={onChangeApiKey}
-                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors border border-gray-500"
-               >
-                 Change Key
-               </button>
+               
+               <input 
+                 type="password"
+                 value={apiKey}
+                 onChange={(e) => onApiKeyChange(e.target.value)}
+                 placeholder="Enter your API Key here"
+                 className="w-full bg-[#0d1117] border border-gray-600 rounded-lg px-4 py-2.5 text-sm text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-mono"
+               />
+               
+               <p className="text-xs text-gray-500 flex items-center gap-1">
+                 Need a key? <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">Get one from Google AI Studio</a>
+               </p>
              </div>
            </div>
         </div>

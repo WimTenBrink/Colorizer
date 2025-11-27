@@ -1,10 +1,16 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Console } from './components/Console';
 import { SettingsModal } from './components/SettingsModal';
 import { GeminiService } from './services/geminiService';
 import { LogEntry, QueueItem, ProcessedItem, AppSettings, DEFAULT_SETTINGS } from './types';
-import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Download, Trash2, RotateCcw, Maximize2, Eraser, Key, ChevronLeft, ChevronRight, RefreshCw, Footprints, SlidersHorizontal, ChevronDown, Mountain, PenTool, BookOpen, Scissors } from 'lucide-react';
+import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Trash2, RotateCcw, Maximize2, Eraser, ChevronLeft, ChevronRight, RefreshCw, Footprints, SlidersHorizontal, ChevronDown, Mountain, PenTool, BookOpen, Scissors } from 'lucide-react';
+
+// Polyfill process.env for browser environments if needed
+if (typeof process === 'undefined') {
+  (window as any).process = { env: {} };
+} else if (!process.env) {
+  (process as any).env = {};
+}
 
 const App: React.FC = () => {
   // State
@@ -13,8 +19,10 @@ const App: React.FC = () => {
   const [processed, setProcessed] = useState<ProcessedItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [zoomedItem, setZoomedItem] = useState<ProcessedItem | null>(null);
-  const [hasApiKey, setHasApiKey] = useState(false);
   
+  // API Key State (Manual + System)
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('katje-api-key') || '');
+
   // Settings with Local Storage Persistence
   const [settings, setSettings] = useState<AppSettings>(() => {
     try {
@@ -39,33 +47,40 @@ const App: React.FC = () => {
     errors: queue.filter(q => q.status === 'error').length
   };
 
+  // Sync API Key to Environment & Storage
+  useEffect(() => {
+    if (apiKey) {
+      localStorage.setItem('katje-api-key', apiKey);
+      // Inject into process.env for GeminiService
+      Object.assign(process.env, { API_KEY: apiKey });
+    }
+  }, [apiKey]);
+
   // Persist Settings
   useEffect(() => {
     localStorage.setItem('katje-settings', JSON.stringify(settings));
   }, [settings]);
 
-  // Check API Key on Mount
+  // Check API Key on Mount & Auto-open Settings if missing
   useEffect(() => {
     const checkKey = async () => {
+      let systemKeyExists = false;
       try {
-        const hasKey = await (window as any).aistudio.hasSelectedApiKey();
-        setHasApiKey(hasKey);
+        // Check if injected by AI Studio environment
+        if ((window as any).aistudio && (window as any).aistudio.hasSelectedApiKey) {
+           systemKeyExists = await (window as any).aistudio.hasSelectedApiKey();
+        }
       } catch (e) {
-        console.error("Error checking API key status", e);
+        // Ignore error if aistudio object is missing
+      }
+
+      // If no key from system AND no manual key, open settings
+      if (!systemKeyExists && !localStorage.getItem('katje-api-key')) {
+        setIsSettingsOpen(true);
       }
     };
     checkKey();
   }, []);
-
-  const handleSelectApiKey = async () => {
-    try {
-      await (window as any).aistudio.openSelectKey();
-      // Assume success as per instructions/best effort
-      setHasApiKey(true);
-    } catch (e) {
-      console.error("Failed to select API key", e);
-    }
-  };
   
   // Refs
   const geminiService = useRef(new GeminiService());
@@ -336,40 +351,6 @@ const App: React.FC = () => {
         : item
     ));
   };
-
-  // API Key Blocking Overlay
-  if (!hasApiKey) {
-    return (
-      <div className="flex flex-col h-screen bg-[#0d1117] text-gray-200 font-sans items-center justify-center p-4">
-        <div className="bg-[#161b22] border border-gray-800 p-8 rounded-2xl shadow-2xl max-w-md w-full text-center">
-          <div className="bg-gradient-to-br from-pink-500 to-purple-600 w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-pink-500/20">
-            <ImageIcon className="text-white" size={32} />
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Welcome to Katje Colorizer</h1>
-          <p className="text-gray-400 mb-8">
-            To start colorizing your images with high-precision AI, please select your Google Cloud API Key.
-          </p>
-          
-          <button 
-            onClick={handleSelectApiKey}
-            className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg transition-all shadow-lg shadow-blue-900/20 mb-4"
-          >
-            <Key size={18} />
-            Select API Key
-          </button>
-          
-          <a 
-            href="https://ai.google.dev/gemini-api/docs/billing" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-xs text-blue-400 hover:text-blue-300 underline"
-          >
-            Learn about API billing requirements
-          </a>
-        </div>
-      </div>
-    );
-  }
 
   // Filter queues for display
   const errorQueue = queue.filter(q => q.status === 'error');
@@ -771,7 +752,8 @@ const App: React.FC = () => {
         onClose={() => setIsSettingsOpen(false)} 
         settings={settings}
         onUpdate={setSettings}
-        onChangeApiKey={handleSelectApiKey}
+        apiKey={apiKey}
+        onApiKeyChange={setApiKey}
       />
 
       {/* Zoom Modal */}
