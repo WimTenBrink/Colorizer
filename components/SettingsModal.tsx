@@ -1,15 +1,16 @@
 import React from 'react';
 import { AppSettings, MODELS } from '../types';
-import { X, Settings, Wand2 } from 'lucide-react';
+import { X, Settings, Wand2, Key } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   settings: AppSettings;
   onUpdate: (newSettings: AppSettings) => void;
+  onChangeApiKey: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings, onUpdate }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings, onUpdate, onChangeApiKey }) => {
   if (!isOpen) return null;
 
   return (
@@ -27,7 +28,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
           </button>
         </div>
 
-        <div className="p-6 space-y-8">
+        <div className="p-6 space-y-8 max-h-[70vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600">
           {/* Models Section */}
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Model Selection</h3>
@@ -81,34 +82,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                 className="w-full h-24 bg-black/30 border border-gray-600 rounded-lg px-4 py-3 text-sm text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none resize-none transition-all"
               />
               <p className="text-xs text-gray-500">
-                This text is appended to the base instruction: "Colorize this image realistically. Use oil paint. Add a proper background. It should almost be a photo."
+                This text is appended to the base instruction.
               </p>
             </div>
           </div>
 
-          <div className="h-px bg-gray-700" />
+           <div className="h-px bg-gray-700" />
 
-          {/* Resolution */}
+           {/* API Key Section */}
            <div className="space-y-4">
-            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Output Quality</h3>
-             <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300">Resolution (Pro models only)</label>
-                <div className="flex gap-3">
-                  {['1K', '2K', '4K'].map((res) => (
-                    <button
-                      key={res}
-                      onClick={() => onUpdate({...settings, resolution: res as any})}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                        settings.resolution === res 
-                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' 
-                        : 'bg-black/30 text-gray-400 hover:bg-gray-700 border border-gray-600'
-                      }`}
-                    >
-                      {res}
-                    </button>
-                  ))}
-                </div>
-              </div>
+             <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+               <Key size={16} />
+               API Configuration
+             </h3>
+             <div className="flex items-center justify-between bg-black/30 p-4 rounded-lg border border-gray-600">
+               <div>
+                 <p className="text-sm font-medium text-gray-200">Google Cloud API Key</p>
+                 <p className="text-xs text-gray-500">Required for Gemini and Imagen models</p>
+               </div>
+               <button 
+                 onClick={onChangeApiKey}
+                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors border border-gray-500"
+               >
+                 Change Key
+               </button>
+             </div>
            </div>
         </div>
         

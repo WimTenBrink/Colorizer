@@ -1,3 +1,4 @@
+
 export interface LogEntry {
   id: string;
   timestamp: string;
@@ -12,6 +13,8 @@ export interface QueueItem {
   previewUrl: string;
   status: 'pending' | 'processing' | 'completed' | 'error';
   originalName: string;
+  errorMessage?: string;
+  retryCount?: number;
 }
 
 export interface ProcessedItem {
@@ -26,14 +29,24 @@ export interface AppSettings {
   geminiModel: string;
   imagenModel: string;
   customPrompt: string;
-  resolution: '1K' | '2K' | '4K'; // Only applies to Pro models
+  resolution: '1K' | '2K' | '4K' | '8K'; // Only applies to Pro models
+  barefootMode: boolean;
+  removeBackground: boolean;
+  revertToLineArt: boolean;
+  describeMode: boolean;
+  extractCharacter: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   geminiModel: 'gemini-2.5-flash', // For filename generation
   imagenModel: 'gemini-2.5-flash-image', // "Nano Banana"
   customPrompt: '',
-  resolution: '1K'
+  resolution: '4K',
+  barefootMode: false,
+  removeBackground: false,
+  revertToLineArt: false,
+  describeMode: false,
+  extractCharacter: false
 };
 
 export const MODELS = {

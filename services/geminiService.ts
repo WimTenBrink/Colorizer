@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { AppSettings } from "../types";
 
@@ -17,12 +18,13 @@ export const fileToGenerativePart = async (file: File): Promise<string> => {
 };
 
 export class GeminiService {
-  private ai: GoogleGenAI;
-
-  constructor() {
-    // Strictly using process.env.API_KEY as per system instructions
+  
+  private getAi(): GoogleGenAI {
+    // Strictly using process.env.API_KEY as per system instructions.
+    // We instantiate this on every call to ensure we pick up the key 
+    // if it was selected/changed at runtime.
     const apiKey = process.env.API_KEY || '';
-    this.ai = new GoogleGenAI({ apiKey });
+    return new GoogleGenAI({ apiKey });
   }
 
   async generateFilename(base64Image: string, modelId: string): Promise<{ filename: string, logs: any[] }> {
@@ -43,7 +45,8 @@ export class GeminiService {
     logs.push({ type: 'req', title: 'Filename Generation Request', data: reqPayload });
 
     try {
-      const response: GenerateContentResponse = await this.ai.models.generateContent(reqPayload);
+      const ai = this.getAi();
+      const response: GenerateContentResponse = await ai.models.generateContent(reqPayload);
       
       logs.push({ type: 'res', title: 'Filename Generation Response', data: response });
       
@@ -54,6 +57,33 @@ export class GeminiService {
     } catch (error) {
        logs.push({ type: 'err', title: 'Filename Generation Error', data: error });
        return { filename: 'processed-image', logs };
+    }
+  }
+
+  async generateStory(base64Image: string, modelId: string): Promise<{ content: string, logs: any[] }> {
+    const logs: any[] = [];
+    const prompt = "Write a short, engaging story based on this image. Give it a creative title formatted as a Markdown Header (# Title). Format the story in Markdown.";
+    
+    const reqPayload = {
+      model: modelId,
+      contents: {
+        parts: [
+            { inlineData: { mimeType: 'image/png', data: base64Image } },
+            { text: prompt }
+        ]
+      }
+    };
+
+    logs.push({ type: 'req', title: 'Story Generation Request', data: reqPayload });
+
+    try {
+        const ai = this.getAi();
+        const response: GenerateContentResponse = await ai.models.generateContent(reqPayload);
+        logs.push({ type: 'res', title: 'Story Generation Response', data: response });
+        return { content: response.text || '', logs };
+    } catch (e: any) {
+        logs.push({ type: 'err', title: 'Story Generation Error', data: e });
+        return { content: '', logs }; // Return empty string on error so main process doesn't crash completely
     }
   }
 
@@ -68,14 +98,50 @@ export class GeminiService {
       const base64Image = await fileToGenerativePart(file);
       const mimeType = file.type;
 
-      // 1. Generate Filename (Parallelizable, but sequential for better logging flow)
+      // 1. Generate Filename
       const nameResult = await this.generateFilename(base64Image, settings.geminiModel);
       logs.push(...nameResult.logs);
 
       // 2. Generate Image
       const model = settings.imagenModel;
-      const basePrompt = "Colorize this image realistically. Use oil paint. Add a proper background. It should almost be a photo.";
+      
+      // Construct Prompt based on settings
+      let basePrompt = "";
+      
+      if (settings.revertToLineArt) {
+        // Line Art Mode
+        basePrompt = "Convert this image into high-quality black and white line art. Remove all shading, gradients, and colors. Focus on clean, crisp outlines. Use shading, hatching, or shades of grey specifically to represent darker skin tones, while keeping the rest as clean line art. Maintain the original composition but strictly as line art. Do not use a Manga style unless the original is distinctly Manga. Clean up text balloons and visual noise.";
+      } else {
+        // Photo-realistic Colorization Mode
+        basePrompt = "Colorize this image realistically. Use oil paint style. It should almost be a photo. Transform line drawings into photo-realistic images; do not retain outline lines, 'melt' them into realistic edges. If the image already has colors or a background, keep them but enhance them to be photo-realistic. Clean up the image: remove text balloons, text, and visual noise. Put more focus on the main characters. Ensure there are no white borders or whitespace on the sides. Do not use a Manga style unless the original is distinctly Manga. Treat this image as standalone. If the input contains multiple panels (like a comic page), crop/focus on and generate ONLY the largest or most significant panel as a single full image. Regarding content: Artistic and natural nudity is acceptable; do not heavily censor or hide it if it fits the artistic context.";
+        
+        // Background logic
+        if (settings.extractCharacter) {
+          basePrompt += " Isolate the main character. Crop the image to focus solely on them. Remove the background completely and replace it with a solid, pure white background (#FFFFFF). Ensure the character is fully visible and not cut off.";
+        } else if (settings.removeBackground) {
+          basePrompt += " Remove the existing background and replace it with a simple, nice landscape.";
+        }
+      }
+
+      // Shared Instructions (Error Fixing & Barefoot)
+      basePrompt += " Fix any anatomical errors or distortions in the original image, such as missing fingers, extra digits, distorted limbs, or asymmetric faces.";
+
+      if (settings.barefootMode) {
+        basePrompt += " Ensure all characters are barefoot.";
+      }
+
       const fullPrompt = settings.customPrompt ? `${basePrompt} ${settings.customPrompt}` : basePrompt;
+
+      // Disable safety blocks to allow the model to see the input and generate unrestricted art
+      const safetySettings = [
+        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' }
+      ];
+
+      // Map 8K to 4K as per API limits
+      const effectiveResolution = settings.resolution === '8K' ? '4K' : settings.resolution;
 
       const reqPayload: any = {
         model,
@@ -86,18 +152,20 @@ export class GeminiService {
           ]
         },
         config: {
+            safetySettings,
             imageConfig: {
                 // Only set imageSize if using the Pro model, otherwise it might throw or be ignored
-                ...(model.includes('pro') && { imageSize: settings.resolution })
+                ...(model.includes('pro') && { imageSize: effectiveResolution })
             }
         }
       };
 
-      logs.push({ type: 'req', title: 'Image Colorization Request', data: reqPayload });
+      logs.push({ type: 'req', title: 'Image Generation Request', data: reqPayload });
 
-      const response: GenerateContentResponse = await this.ai.models.generateContent(reqPayload);
+      const ai = this.getAi();
+      const response: GenerateContentResponse = await ai.models.generateContent(reqPayload);
 
-      logs.push({ type: 'res', title: 'Image Colorization Response', data: response });
+      logs.push({ type: 'res', title: 'Image Generation Response', data: response });
 
       let outputUrl: string | null = null;
 
