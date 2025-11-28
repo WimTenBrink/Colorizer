@@ -1,3 +1,5 @@
+
+
 import React from 'react';
 import { X, Book, Github, Globe, Cpu, Layers, Palette, Wand2, Terminal, AlertTriangle, ShieldCheck, Download, Save, HardDrive } from 'lucide-react';
 
@@ -6,7 +8,7 @@ interface ManualModalProps {
   onClose: () => void;
 }
 
-const MANUAL_MARKDOWN = `# Katje Colorizer Documentation v1.1
+const MANUAL_MARKDOWN = `# Katje Colorizer Documentation v1.2
 
 ## 1. Introduction to Katje Colorizer
 
@@ -38,8 +40,10 @@ The primary function of the app. It takes black-and-white input and generates a 
 ### 3.2 Line Art Conversion
 By toggling the "Line Art Mode", the engine reverses its process. It takes colored images (or messy sketches) and distills them into clean, high-contrast black-and-white line art. This is invaluable for comic artists who need to clean up rough pencil scans or for creating coloring book pages.
 
-### 3.3 Intelligent Background Removal
-The "Remove BG" option doesn't just cut pixels; it regenerates the image with an Alpha Channel. This means the subject is seamlessly extracted, with transparency preserved for hair strands and semi-transparent materials.
+### 3.3 Background Replacement
+The application allows you to completely swap the environment of your subject. 
+- **Transparent:** Removes the background creating an Alpha Channel PNG.
+- **Scenic Presets:** Place your character instantly on a Beach, on Mars, in a Castle, or dozens of other locations. The AI handles the composite work, adjusting lighting and shadows to match the new scene.
 
 ### 3.4 Character Extraction
 Similar to background removal, but places the subject on a pure white background. This is optimized for creating character reference sheets, ensuring the focus remains entirely on the design of the character without environmental distractions.
@@ -117,7 +121,7 @@ export const ManualModal: React.FC<ManualModalProps> = ({ isOpen, onClose }) => 
             </div>
             <div>
               <h2 className="text-2xl font-bold text-white tracking-tight">User Manual</h2>
-              <p className="text-sm text-gray-400">Katje Colorizer Documentation v1.1</p>
+              <p className="text-sm text-gray-400">Katje Colorizer Documentation v1.2</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -216,10 +220,14 @@ export const ManualModal: React.FC<ManualModalProps> = ({ isOpen, onClose }) => 
                 By toggling the "Line Art Mode", the engine reverses its process. It takes colored images (or messy sketches) and distills them into clean, high-contrast black-and-white line art. This is invaluable for comic artists who need to clean up rough pencil scans or for creating coloring book pages.
               </p>
 
-              <h3 className="text-xl text-white mt-6">3.3 Intelligent Background Removal</h3>
+              <h3 className="text-xl text-white mt-6">3.3 Background Replacement</h3>
               <p>
-                The "Remove BG" option doesn't just cut pixels; it regenerates the image with an Alpha Channel. This means the subject is seamlessly extracted, with transparency preserved for hair strands and semi-transparent materials.
+                The application allows you to completely swap the environment of your subject. 
               </p>
+              <ul className="text-sm mt-2 space-y-2">
+                <li><strong>Transparent:</strong> Removes the background creating an Alpha Channel PNG.</li>
+                <li><strong>Scenic Presets:</strong> Place your character instantly on a Beach, on Mars, in a Castle, or dozens of other locations. The AI handles the composite work, adjusting lighting and shadows to match the new scene.</li>
+              </ul>
 
               <h3 className="text-xl text-white mt-6">3.4 Character Extraction</h3>
               <p>
@@ -298,7 +306,7 @@ export const ManualModal: React.FC<ManualModalProps> = ({ isOpen, onClose }) => 
 
               <h3 className="text-xl text-white mt-8">4.5 Anatomy Fixer</h3>
               <p>
-                Generative AI sometimes struggles with extremities. The "Fix Anatomy" toggle injects specific negative prompts and guidance instructions to prioritize the correct rendering of hands, fingers (5 per hand!), and limb symmetry.
+                Generative AI sometimes struggles with extremities. The "Fix Anatomy" toggle injects specific negative prompts and guidance instructions to prioritize the correct rendering of hands, fingers, and limb symmetry.
               </p>
             </div>
 
@@ -321,7 +329,7 @@ export const ManualModal: React.FC<ManualModalProps> = ({ isOpen, onClose }) => 
 
               <h3 className="text-xl text-white mt-6">5.3 Throttling & Limits</h3>
               <p>
-                <strong>API Throttling:</strong> To ensure high quality service and adherence to API quotas, the application automatically throttles generation requests to a maximum of <strong>60 images per minute</strong>.
+                <strong>API Throttling:</strong> To comply with standard API quotas, the application limits processing to **60 images per minute**.
               </p>
               <p className="mt-2">
                 <strong>Download Throttling:</strong> Modern browsers consider a website trying to download many files at once as a security threat (spam). To bypass this, Katje Colorizer implements a "Download Queue" that spaces out file saves by 1.5 seconds.

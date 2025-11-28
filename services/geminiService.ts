@@ -117,8 +117,11 @@ export class GeminiService {
         // Background logic
         if (settings.extractCharacter) {
           basePrompt += " Isolate the main character. Crop the image to focus solely on them. Remove the background completely and replace it with a solid, pure white background (#FFFFFF). Ensure the character is fully visible and not cut off.";
-        } else if (settings.removeBackground) {
+        } else if (settings.background === 'Transparent') {
           basePrompt += " Remove the existing background completely and replace it with a transparent alpha channel. Ensure the output is a RGBA PNG with transparency.";
+        } else if (settings.background !== 'Original') {
+          // For scenic backgrounds
+          basePrompt += ` Replace the entire background with a high-quality, realistic depiction of a ${settings.background}. Ensure the lighting, shadows, and reflections on the character match this new ${settings.background} environment naturally.`;
         }
       }
 

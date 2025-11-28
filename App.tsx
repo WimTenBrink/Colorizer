@@ -1,11 +1,12 @@
 
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Console } from './components/Console';
 import { SettingsModal } from './components/SettingsModal';
 import { ManualModal } from './components/ManualModal';
 import { GeminiService } from './services/geminiService';
 import { loadQueue, syncQueue } from './services/storageService';
-import { LogEntry, QueueItem, ProcessedItem, AppSettings, DEFAULT_SETTINGS, SPECIES_LIST, Species, TECH_LEVELS, TechLevel, AGE_GROUPS, AgeGroup, FOOTWEAR_OPTIONS, Footwear } from './types';
+import { LogEntry, QueueItem, ProcessedItem, AppSettings, DEFAULT_SETTINGS, SPECIES_LIST, Species, TECH_LEVELS, TechLevel, AGE_GROUPS, AgeGroup, FOOTWEAR_OPTIONS, Footwear, BACKGROUND_OPTIONS, BackgroundType } from './types';
 import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Trash2, RotateCcw, Maximize2, Eraser, ChevronLeft, ChevronRight, RefreshCw, Footprints, SlidersHorizontal, ChevronDown, Mountain, PenTool, BookOpen, Scissors, Pause, Play, Wand2, Shirt, UserRoundCog, Cpu, Book, Baby, Hourglass, AlertTriangle } from 'lucide-react';
 
 // Polyfill process.env for browser environments if needed
@@ -46,7 +47,7 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings>(() => {
     try {
       const saved = localStorage.getItem('katje-settings');
-      // Merge saved settings with default to handle removed keys (maxRetries)
+      // Merge saved settings with default to handle removed keys (maxRetries, removeBackground)
       return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
     } catch (e) {
       return DEFAULT_SETTINGS;
@@ -630,23 +631,6 @@ const App: React.FC = () => {
                         <div className={`w-3 h-3 rounded-full ${settings.extractCharacter ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]' : 'bg-gray-600'}`} />
                       </button>
 
-                      {/* Remove Background */}
-                      <button
-                        onClick={() => setSettings(s => ({ ...s, removeBackground: !s.removeBackground }))}
-                         disabled={settings.revertToLineArt || settings.extractCharacter}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                          settings.removeBackground && !settings.revertToLineArt && !settings.extractCharacter
-                            ? 'bg-green-900/30 text-green-300 border border-green-700/50' 
-                            : 'bg-gray-800/50 text-gray-400 hover:bg-gray-800 border border-transparent'
-                        } ${(settings.revertToLineArt || settings.extractCharacter) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                         <div className="flex items-center gap-2">
-                          <Mountain size={14} />
-                          <span>Remove BG</span>
-                        </div>
-                        <div className={`w-3 h-3 rounded-full ${settings.removeBackground && !settings.revertToLineArt && !settings.extractCharacter ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-gray-600'}`} />
-                      </button>
-
                       {/* Revert to Line Art */}
                       <button
                         onClick={() => setSettings(s => ({ ...s, revertToLineArt: !s.revertToLineArt }))}
@@ -687,6 +671,21 @@ const App: React.FC = () => {
                      <div className="space-y-3">
                       <h4 className="text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-2"><UserRoundCog size={12}/> Transformations</h4>
                       
+                      {/* Background (New) */}
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Mountain size={12}/> Background</label>
+                        <select 
+                          value={settings.background}
+                          onChange={(e) => setSettings(s => ({ ...s, background: e.target.value as any }))}
+                          disabled={settings.revertToLineArt || settings.extractCharacter}
+                          className={`w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none ${settings.revertToLineArt || settings.extractCharacter ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          {BACKGROUND_OPTIONS.map(bg => (
+                            <option key={bg} value={bg}>{bg}</option>
+                          ))}
+                        </select>
+                      </div>
+
                       {/* Species */}
                       <div className="space-y-1">
                         <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><UserRoundCog size={12}/> Species</label>
