@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Console } from './components/Console';
 import { SettingsModal } from './components/SettingsModal';
 import { GeminiService } from './services/geminiService';
-import { LogEntry, QueueItem, ProcessedItem, AppSettings, DEFAULT_SETTINGS } from './types';
-import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Trash2, RotateCcw, Maximize2, Eraser, ChevronLeft, ChevronRight, RefreshCw, Footprints, SlidersHorizontal, ChevronDown, Mountain, PenTool, BookOpen, Scissors } from 'lucide-react';
+import { LogEntry, QueueItem, ProcessedItem, AppSettings, DEFAULT_SETTINGS, SPECIES_LIST, Species } from './types';
+import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Trash2, RotateCcw, Maximize2, Eraser, ChevronLeft, ChevronRight, RefreshCw, Footprints, SlidersHorizontal, ChevronDown, Mountain, PenTool, BookOpen, Scissors, Pause, Play, Wand2, Shirt, UserRoundCog } from 'lucide-react';
 
 // Polyfill process.env for browser environments if needed
 if (typeof process === 'undefined') {
@@ -18,6 +19,7 @@ const App: React.FC = () => {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [processed, setProcessed] = useState<ProcessedItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [zoomedItem, setZoomedItem] = useState<ProcessedItem | null>(null);
   
   // API Key State (Manual + System)
@@ -86,6 +88,10 @@ const App: React.FC = () => {
   const geminiService = useRef(new GeminiService());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const optionsRef = useRef<HTMLDivElement>(null);
+  
+  // Download Queue Refs
+  const downloadQueueRef = useRef<{url: string, filename: string}[]>([]);
+  const isDownloadingRef = useRef(false);
 
   // Click outside listener for options menu
   useEffect(() => {
@@ -115,9 +121,46 @@ const App: React.FC = () => {
     setLogs(prev => [entry, ...prev]);
   }, []);
 
+  // Helper: Download Queue Processor
+  // Ensures downloads are spaced out to avoid browser blocking multiple files
+  const processDownloadQueue = useCallback(() => {
+    if (isDownloadingRef.current || downloadQueueRef.current.length === 0) return;
+    
+    isDownloadingRef.current = true;
+    const item = downloadQueueRef.current.shift();
+    
+    if (item) {
+      try {
+        const link = document.createElement('a');
+        link.href = item.url;
+        link.download = item.filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (e) {
+        console.error("Download failed", e);
+      }
+    }
+    
+    // Add delay to prevent browser blocking multiple downloads
+    setTimeout(() => {
+      isDownloadingRef.current = false;
+      // Continue queue if items exist
+      if (downloadQueueRef.current.length > 0) {
+        processDownloadQueue();
+      }
+    }, 1500); // 1.5s delay
+  }, []);
+
+  const queueDownload = useCallback((url: string, filename: string) => {
+    downloadQueueRef.current.push({ url, filename });
+    processDownloadQueue();
+  }, [processDownloadQueue]);
+
+
   // Helper: Process Queue
   const processNext = useCallback(async () => {
-    if (isProcessing || queue.length === 0) return;
+    if (isProcessing || isPaused || queue.length === 0) return;
 
     // Find first pending item
     const nextItemIndex = queue.findIndex(item => item.status === 'pending');
@@ -156,14 +199,9 @@ const App: React.FC = () => {
 
         setProcessed(prev => [processedItem, ...prev]);
 
-        // Auto Download Image
-        const link = document.createElement('a');
-        link.href = result.imageUrl;
-        link.download = `${result.filename}.png`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        addLog('INFO', `Downloaded: ${result.filename}.png`, { url: result.imageUrl });
+        // Auto Download Image using Queue
+        queueDownload(result.imageUrl, `${result.filename}.png`);
+        addLog('INFO', `Queued download: ${result.filename}.png`, { url: result.imageUrl });
         
         // Describe Mode - Generate Story
         if (settings.describeMode && !settings.revertToLineArt) {
@@ -184,13 +222,10 @@ const App: React.FC = () => {
              const mdContent = `${storyResult.content}\n\n---\n\n![Generated Image](${result.imageUrl})`;
              const blob = new Blob([mdContent], { type: 'text/markdown' });
              const mdUrl = URL.createObjectURL(blob);
-             const mdLink = document.createElement('a');
-             mdLink.href = mdUrl;
-             mdLink.download = `${result.filename}.md`;
-             document.body.appendChild(mdLink);
-             mdLink.click();
-             document.body.removeChild(mdLink);
-             addLog('INFO', `Downloaded description: ${result.filename}.md`);
+             
+             // Auto Download Markdown using Queue
+             queueDownload(mdUrl, `${result.filename}.md`);
+             addLog('INFO', `Queued description download: ${result.filename}.md`);
           }
         }
 
@@ -210,39 +245,38 @@ const App: React.FC = () => {
       
       const errMsg = error.error?.message || error.message || 'Unknown processing error';
 
-      // Update logic: Check retry count. If it was a retry, remove it. If first failure, move to error.
       setQueue(prev => {
-        return prev.reduce((acc, q) => {
+        return prev.map(q => {
           if (q.id === item.id) {
-            // This is the item that failed
+            // Retry Logic
             const currentRetryCount = q.retryCount || 0;
-            if (currentRetryCount >= 1) {
-              // It failed a second time (original + 1 retry)
-              // Log removal
-              console.log(`Item ${q.originalName} failed after retry. Removing.`);
-              // Don't push to acc, effectively removing it
+            const maxRetries = settings.maxRetries === 'infinite' ? Infinity : settings.maxRetries;
+            
+            if (currentRetryCount < maxRetries) {
+              const newCount = currentRetryCount + 1;
+              console.log(`Retrying item ${q.originalName}. Attempt ${newCount} of ${maxRetries}`);
+              // Set status back to pending to be picked up again
+              return { ...q, status: 'pending', retryCount: newCount, errorMessage: errMsg };
             } else {
-              // Move to error state
-              acc.push({ ...q, status: 'error', errorMessage: errMsg });
+               // Move to error state if max retries reached
+               return { ...q, status: 'error', errorMessage: errMsg };
             }
-          } else {
-            acc.push(q);
           }
-          return acc;
-        }, [] as QueueItem[]);
+          return q;
+        });
       });
 
     } finally {
       setIsProcessing(false);
     }
-  }, [queue, isProcessing, settings, addLog]);
+  }, [queue, isProcessing, isPaused, settings, addLog, queueDownload]);
 
   // Queue Watcher
   useEffect(() => {
-    if (!isProcessing && queue.some(q => q.status === 'pending')) {
+    if (!isProcessing && !isPaused && queue.some(q => q.status === 'pending')) {
       processNext();
     }
-  }, [queue, isProcessing, processNext]);
+  }, [queue, isProcessing, isPaused, processNext]);
 
   // Zoom Navigation Logic
   const handleZoomNext = useCallback(() => {
@@ -335,7 +369,7 @@ const App: React.FC = () => {
     addLog('INFO', 'Retrying item', { id });
     setQueue(prev => prev.map(item => 
       item.id === id 
-        ? { ...item, status: 'pending', errorMessage: undefined, retryCount: (item.retryCount || 0) + 1 } 
+        ? { ...item, status: 'pending', errorMessage: undefined, retryCount: 0 } 
         : item
     ));
   };
@@ -347,7 +381,7 @@ const App: React.FC = () => {
     addLog('INFO', 'Retrying all failed items', { count: errorItems.length });
     setQueue(prev => prev.map(item => 
       item.status === 'error'
-        ? { ...item, status: 'pending', errorMessage: undefined, retryCount: (item.retryCount || 0) + 1 }
+        ? { ...item, status: 'pending', errorMessage: undefined, retryCount: 0 }
         : item
     ));
   };
@@ -374,6 +408,15 @@ const App: React.FC = () => {
             </div>
           </div>
           
+          {/* Pause Button */}
+          <button
+             onClick={() => setIsPaused(!isPaused)}
+             className={`flex items-center justify-center w-10 h-10 rounded-full transition-all ${isPaused ? 'bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30' : 'bg-green-500/20 text-green-500 hover:bg-green-500/30'}`}
+             title={isPaused ? "Resume Processing" : "Pause Processing"}
+          >
+            {isPaused ? <Play size={20} className="fill-current" /> : <Pause size={20} className="fill-current" />}
+          </button>
+
           {/* Stats Bar */}
           <div className="hidden lg:flex items-center gap-2 bg-[#0d1117] px-3 py-1.5 rounded-lg border border-gray-800">
              <div className="flex items-center gap-1.5 px-2 border-r border-gray-800">
@@ -413,12 +456,28 @@ const App: React.FC = () => {
               </button>
 
               {isOptionsOpen && (
-                <div className="absolute top-full right-0 mt-2 w-72 bg-[#1e232b] border border-gray-700 rounded-xl shadow-2xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="absolute top-full right-0 mt-2 w-80 bg-[#1e232b] border border-gray-700 rounded-xl shadow-2xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-200 max-h-[85vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600">
                   <div className="space-y-4">
-                    {/* Resolution Section */}
+                    
+                    {/* Processing Settings */}
                     <div>
-                      <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">Quality (Pro Models)</h4>
+                      <h4 className="text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-2"><RefreshCw size={12}/> Processing</h4>
+                      <div className="flex items-center justify-between text-sm text-gray-300 mb-2">
+                        <span>Retries on Failure</span>
+                        <select 
+                          value={settings.maxRetries} 
+                          onChange={(e) => setSettings(s => ({ ...s, maxRetries: e.target.value === 'infinite' ? 'infinite' : Number(e.target.value) as any }))}
+                          className="bg-black/30 border border-gray-600 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none"
+                        >
+                          <option value={1}>1 Retry</option>
+                          <option value={3}>3 Retries</option>
+                          <option value={5}>5 Retries</option>
+                          <option value="infinite">Infinite</option>
+                        </select>
+                      </div>
+                      
                       <div className="grid grid-cols-4 gap-1">
+                         {/* Resolution (Pro Models) */}
                         {['1K', '2K', '4K', '8K'].map((res) => (
                           <button
                             key={res}
@@ -434,11 +493,28 @@ const App: React.FC = () => {
                         ))}
                       </div>
                     </div>
-
+                    
                     <div className="h-px bg-gray-700" />
 
-                    {/* Toggles */}
+                    {/* Enhancements */}
                     <div className="space-y-2">
+                      <h4 className="text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-2"><Wand2 size={12}/> Enhancements</h4>
+                       {/* Fix Errors */}
+                      <button
+                        onClick={() => setSettings(s => ({ ...s, fixErrors: !s.fixErrors }))}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                          settings.fixErrors
+                            ? 'bg-emerald-900/30 text-emerald-300 border border-emerald-700/50' 
+                            : 'bg-gray-800/50 text-gray-400 hover:bg-gray-800 border border-transparent'
+                        }`}
+                      >
+                         <div className="flex items-center gap-2">
+                          <CheckCircle size={14} />
+                          <span>Fix Anatomy/Errors</span>
+                        </div>
+                        <div className={`w-3 h-3 rounded-full ${settings.fixErrors ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-gray-600'}`} />
+                      </button>
+
                        {/* Barefoot */}
                       <button
                         onClick={() => setSettings(s => ({ ...s, barefootMode: !s.barefootMode }))}
@@ -521,6 +597,43 @@ const App: React.FC = () => {
                         <div className={`w-3 h-3 rounded-full ${settings.describeMode && !settings.revertToLineArt ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.5)]' : 'bg-gray-600'}`} />
                       </button>
                     </div>
+
+                    <div className="h-px bg-gray-700" />
+
+                     {/* Transformations */}
+                     <div className="space-y-3">
+                      <h4 className="text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-2"><UserRoundCog size={12}/> Transformations</h4>
+                      
+                      {/* Clothing Amount */}
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Shirt size={12}/> Clothing</label>
+                        <select 
+                          value={settings.clothingAmount}
+                          onChange={(e) => setSettings(s => ({ ...s, clothingAmount: e.target.value as any }))}
+                          className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
+                        >
+                          <option value="as-is">As Is (Default)</option>
+                          <option value="more">More Clothing</option>
+                          <option value="less">Fewer Clothes</option>
+                        </select>
+                      </div>
+
+                      {/* Species */}
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><UserRoundCog size={12}/> Species</label>
+                        <select 
+                          value={settings.targetSpecies}
+                          onChange={(e) => setSettings(s => ({ ...s, targetSpecies: e.target.value as Species }))}
+                          className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
+                        >
+                          {SPECIES_LIST.map(sp => (
+                            <option key={sp} value={sp}>{sp}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                     </div>
+
                   </div>
                 </div>
               )}
@@ -679,7 +792,10 @@ const App: React.FC = () => {
           className="w-80 bg-[#161b22] border-l border-gray-800 flex flex-col shadow-2xl z-10"
         >
           <div className="p-6 border-b border-gray-800">
-            <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Upload Queue</h2>
+            <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center justify-between">
+              Upload Queue
+              {isPaused && <span className="text-yellow-500 text-xs bg-yellow-900/20 px-2 py-0.5 rounded border border-yellow-500/30">PAUSED</span>}
+            </h2>
             
             <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-700 rounded-xl hover:border-gray-500 hover:bg-gray-800/50 transition-all cursor-pointer group">
               <input 
@@ -793,7 +909,7 @@ const App: React.FC = () => {
               onClick={() => setZoomedItem(null)}
               className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
             >
-              <Trash2 size={24} className="rotate-45" /> {/* Use rotate to simulate X if X not imported, but X is usually closed. Let's stick to X if imported or just rely on bg click */}
+              <Trash2 size={24} className="rotate-45" />
             </button>
           </div>
 

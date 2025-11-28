@@ -25,28 +25,44 @@ export interface ProcessedItem {
   timestamp: number;
 }
 
+export type Species = 'Original' | 'Human' | 'Vulcan' | 'Klingon' | 'Elf' | 'Half-Elf' | 'Gnome' | 'Dwarf' | 'Halfling' | 'Mermaid' | 'Angel' | 'Demon';
+
 export interface AppSettings {
   geminiModel: string;
   imagenModel: string;
   customPrompt: string;
-  resolution: '1K' | '2K' | '4K' | '8K'; // Only applies to Pro models
+  resolution: '1K' | '2K' | '4K' | '8K';
+  
+  // Toggles
   barefootMode: boolean;
   removeBackground: boolean;
   revertToLineArt: boolean;
   describeMode: boolean;
   extractCharacter: boolean;
+  fixErrors: boolean; // New
+
+  // Dropdowns
+  maxRetries: 1 | 3 | 5 | 'infinite'; // New
+  clothingAmount: 'as-is' | 'more' | 'less'; // New
+  targetSpecies: Species; // New
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  geminiModel: 'gemini-2.5-flash', // For filename generation
-  imagenModel: 'gemini-2.5-flash-image', // "Nano Banana"
+  geminiModel: 'gemini-2.5-flash',
+  imagenModel: 'gemini-2.5-flash-image',
   customPrompt: '',
   resolution: '4K',
+  
   barefootMode: false,
   removeBackground: false,
   revertToLineArt: false,
   describeMode: false,
-  extractCharacter: false
+  extractCharacter: false,
+  fixErrors: true, 
+
+  maxRetries: 3,
+  clothingAmount: 'as-is',
+  targetSpecies: 'Original'
 };
 
 export const MODELS = {
@@ -59,3 +75,7 @@ export const MODELS = {
     { id: 'gemini-3-pro-image-preview', name: 'Gemini 3.0 Pro Image' },
   ]
 };
+
+export const SPECIES_LIST: Species[] = [
+  'Original', 'Human', 'Vulcan', 'Klingon', 'Elf', 'Half-Elf', 'Gnome', 'Dwarf', 'Halfling', 'Mermaid', 'Angel', 'Demon'
+];

@@ -119,12 +119,28 @@ export class GeminiService {
         if (settings.extractCharacter) {
           basePrompt += " Isolate the main character. Crop the image to focus solely on them. Remove the background completely and replace it with a solid, pure white background (#FFFFFF). Ensure the character is fully visible and not cut off.";
         } else if (settings.removeBackground) {
-          basePrompt += " Remove the existing background and replace it with a simple, nice landscape.";
+          basePrompt += " Remove the existing background and replace it with a transparent background (alpha channel). Ensure the output is a PNG with transparency.";
         }
       }
 
-      // Shared Instructions (Error Fixing & Barefoot)
-      basePrompt += " Fix any anatomical errors or distortions in the original image, such as missing fingers, extra digits, distorted limbs, or asymmetric faces.";
+      // --- New Features Logic ---
+
+      // Species Transformation
+      if (settings.targetSpecies && settings.targetSpecies !== 'Original') {
+        basePrompt += ` Transform the character into a ${settings.targetSpecies}. Add characteristic features of a ${settings.targetSpecies} while maintaining the original pose and identity.`;
+      }
+
+      // Clothing Adjustment
+      if (settings.clothingAmount === 'more') {
+        basePrompt += " Add more layers of clothing. Ensure the character is well-covered and dressed warmly, adding coats, robes, or full outfits where appropriate.";
+      } else if (settings.clothingAmount === 'less') {
+        basePrompt += " Reduce the amount of clothing to be lighter, such as summer wear, swimwear or lighter fabrics, suitable for a tropical environment. Do not generate explicit pornography, but artistic skin exposure is allowed if it fits the context.";
+      }
+
+      // Fix Errors (Conditional)
+      if (settings.fixErrors) {
+        basePrompt += " Fix any anatomical errors or distortions in the original image, such as missing fingers, extra digits, distorted limbs, or asymmetric faces.";
+      }
 
       if (settings.barefootMode) {
         basePrompt += " Ensure all characters are barefoot.";
