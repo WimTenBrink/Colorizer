@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Console } from './components/Console';
 import { SettingsModal } from './components/SettingsModal';
@@ -260,12 +258,20 @@ const App: React.FC = () => {
       });
 
       if (result.imageUrl) {
+        
+        // Determine final filename based on settings
+        // Fallback: Browsers can't download to specific subfolders (like "Line art/") securely via 'download' attribute.
+        // As requested, we use the prefix "lineart." instead.
+        const finalFilename = settings.revertToLineArt 
+          ? `lineart.${result.filename}` 
+          : result.filename;
+
         // Create processed item
         const processedItem: ProcessedItem = {
           id: crypto.randomUUID(),
           originalUrl: item.previewUrl,
           processedUrl: result.imageUrl,
-          fileName: result.filename,
+          fileName: finalFilename,
           timestamp: Date.now()
         };
 
@@ -273,12 +279,12 @@ const App: React.FC = () => {
         setProcessed(prev => [processedItem, ...prev].slice(0, 50));
 
         // Auto Download Image using Queue
-        queueDownload(result.imageUrl, `${result.filename}.png`);
-        addLog('INFO', `Queued download: ${result.filename}.png`, { url: result.imageUrl });
+        queueDownload(result.imageUrl, `${finalFilename}.png`);
+        addLog('INFO', `Queued download: ${finalFilename}.png`, { url: result.imageUrl });
         
         // Describe Mode - Generate Story
         if (settings.describeMode && !settings.revertToLineArt) {
-          addLog('INFO', `Generating story for: ${result.filename}`);
+          addLog('INFO', `Generating story for: ${finalFilename}`, {});
           // Extract base64 from data url
           const base64Data = result.imageUrl.split(',')[1];
           const storyResult = await geminiService.current.generateStory(base64Data, settings.geminiModel);
@@ -297,8 +303,8 @@ const App: React.FC = () => {
              const mdUrl = URL.createObjectURL(blob);
              
              // Auto Download Markdown using Queue
-             queueDownload(mdUrl, `${result.filename}.md`);
-             addLog('INFO', `Queued description download: ${result.filename}.md`);
+             queueDownload(mdUrl, `${finalFilename}.md`);
+             addLog('INFO', `Queued description download: ${finalFilename}.md`, {});
           }
         }
 
@@ -465,7 +471,7 @@ const App: React.FC = () => {
   const handleClearQueue = () => {
     if (window.confirm('Are you sure you want to clear the upload queue?')) {
       setQueue([]);
-      addLog('INFO', 'Queue cleared by user');
+      addLog('INFO', 'Queue cleared by user', {});
     }
   };
 
@@ -948,7 +954,7 @@ const App: React.FC = () => {
               {isPaused && <span className="text-yellow-500 text-xs bg-yellow-900/20 px-2 py-0.5 rounded border border-yellow-500/30">PAUSED</span>}
             </h2>
             
-            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-700 rounded-xl hover:border-gray-500 hover:bg-gray-800/50 transition-all cursor-pointer group">
+            <label className="flex flex-col items-center justify-center w-10 h-32 border-2 border-dashed border-gray-700 rounded-xl hover:border-gray-500 hover:bg-gray-800/50 transition-all cursor-pointer group">
               <input 
                 ref={fileInputRef}
                 type="file" 

@@ -1,5 +1,3 @@
-
-
 import React from 'react';
 import { X, Book, Github, Globe, Cpu, Layers, Palette, Wand2, Terminal, AlertTriangle, ShieldCheck, Download, Save, HardDrive } from 'lucide-react';
 
@@ -39,6 +37,8 @@ The primary function of the app. It takes black-and-white input and generates a 
 
 ### 3.2 Line Art Conversion
 By toggling the "Line Art Mode", the engine reverses its process. It takes colored images (or messy sketches) and distills them into clean, high-contrast black-and-white line art. This is invaluable for comic artists who need to clean up rough pencil scans or for creating coloring book pages.
+
+*Note: When downloading images generated in Line Art Mode, the application will automatically prefix the filename with "lineart." (e.g., \`lineart.cat-sketch.png\`) to help you organize your files.*
 
 ### 3.3 Background Replacement
 The application allows you to completely swap the environment of your subject. 
@@ -80,7 +80,7 @@ The application utilizes your browser's **IndexedDB** to automatically save your
 
 ### 5.3 Throttling & Limits
 - **API Throttling:** To comply with standard API quotas, the application limits processing to **60 images per minute**.
-- **Download Queue:** Modern browsers block websites that try to download too many files simultaneously. Katje Colorizer spaces out file downloads by 1.5 seconds to ensure every file is saved correctly.
+- **Download Queue:** Modern browsers block websites that try to download too many files simultaneously. Katje Colorizer spaces out file saves by 1.5 seconds to ensure every file is saved correctly.
 
 ### 5.4 Manual Error Handling
 If an image fails to process (e.g., due to a content safety block or server error), it is moved to the "Failed Items" list. The system does **not** auto-retry. You must review the error and click "Retry" manually. This ensures a bad batch doesn't result in an infinite loop of API errors.
@@ -219,6 +219,9 @@ export const ManualModal: React.FC<ManualModalProps> = ({ isOpen, onClose }) => 
               <p>
                 By toggling the "Line Art Mode", the engine reverses its process. It takes colored images (or messy sketches) and distills them into clean, high-contrast black-and-white line art. This is invaluable for comic artists who need to clean up rough pencil scans or for creating coloring book pages.
               </p>
+              <p className="text-sm text-blue-300 mt-2 p-3 bg-blue-900/20 rounded border border-blue-900/50">
+                <strong>Note:</strong> When downloading images generated in Line Art Mode, the application will automatically prefix the filename with <code>lineart.</code> (e.g., <code>lineart.cat-sketch.png</code>) to help you organize your files.
+              </p>
 
               <h3 className="text-xl text-white mt-6">3.3 Background Replacement</h3>
               <p>
@@ -337,7 +340,7 @@ export const ManualModal: React.FC<ManualModalProps> = ({ isOpen, onClose }) => 
 
               <h3 className="text-xl text-white mt-6">5.4 Manual Error Handling</h3>
               <p>
-                If an image fails to process (e.g. content safety block or server error), it is moved to the "Failed Items" list. The system does <strong>not</strong> auto-retry. You must review the error and click "Retry" manually. This ensures a bad batch doesn't result in an infinite loop of API errors.
+                If an image fails to process (e.g., due to a content safety block or server error), it is moved to the "Failed Items" list. The system does **not** auto-retry. You must review the error and click "Retry" manually. This ensures a bad batch doesn't result in an infinite loop of API errors.
               </p>
             </div>
 
