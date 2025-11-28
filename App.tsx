@@ -1,10 +1,11 @@
 
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Console } from './components/Console';
 import { SettingsModal } from './components/SettingsModal';
 import { GeminiService } from './services/geminiService';
-import { LogEntry, QueueItem, ProcessedItem, AppSettings, DEFAULT_SETTINGS, SPECIES_LIST, Species } from './types';
-import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Trash2, RotateCcw, Maximize2, Eraser, ChevronLeft, ChevronRight, RefreshCw, Footprints, SlidersHorizontal, ChevronDown, Mountain, PenTool, BookOpen, Scissors, Pause, Play, Wand2, Shirt, UserRoundCog } from 'lucide-react';
+import { LogEntry, QueueItem, ProcessedItem, AppSettings, DEFAULT_SETTINGS, SPECIES_LIST, Species, TECH_LEVELS, TechLevel } from './types';
+import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Trash2, RotateCcw, Maximize2, Eraser, ChevronLeft, ChevronRight, RefreshCw, Footprints, SlidersHorizontal, ChevronDown, Mountain, PenTool, BookOpen, Scissors, Pause, Play, Wand2, Shirt, UserRoundCog, Cpu } from 'lucide-react';
 
 // Polyfill process.env for browser environments if needed
 if (typeof process === 'undefined') {
@@ -628,6 +629,20 @@ const App: React.FC = () => {
                         >
                           {SPECIES_LIST.map(sp => (
                             <option key={sp} value={sp}>{sp}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Tech Level */}
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Cpu size={12}/> Tech Level</label>
+                        <select 
+                          value={settings.techLevel}
+                          onChange={(e) => setSettings(s => ({ ...s, techLevel: e.target.value as TechLevel }))}
+                          className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
+                        >
+                          {TECH_LEVELS.map(tl => (
+                            <option key={tl} value={tl}>{tl}</option>
                           ))}
                         </select>
                       </div>

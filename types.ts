@@ -1,4 +1,5 @@
 
+
 export interface LogEntry {
   id: string;
   timestamp: string;
@@ -27,6 +28,8 @@ export interface ProcessedItem {
 
 export type Species = 'Original' | 'Human' | 'Vulcan' | 'Klingon' | 'Elf' | 'Half-Elf' | 'Gnome' | 'Dwarf' | 'Halfling' | 'Mermaid' | 'Angel' | 'Demon';
 
+export type TechLevel = 'Original' | 'Primitive' | 'Ancient' | 'Medieval' | 'Renaissance' | 'Industrial' | 'Modern' | 'Cyberpunk' | 'Sci-Fi' | 'Far Future';
+
 export interface AppSettings {
   geminiModel: string;
   imagenModel: string;
@@ -39,12 +42,13 @@ export interface AppSettings {
   revertToLineArt: boolean;
   describeMode: boolean;
   extractCharacter: boolean;
-  fixErrors: boolean; // New
+  fixErrors: boolean; 
 
   // Dropdowns
-  maxRetries: 1 | 3 | 5 | 'infinite'; // New
-  clothingAmount: 'as-is' | 'more' | 'less'; // New
-  targetSpecies: Species; // New
+  maxRetries: 1 | 3 | 5 | 'infinite';
+  clothingAmount: 'as-is' | 'more' | 'less';
+  targetSpecies: Species;
+  techLevel: TechLevel; // New
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -62,7 +66,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
   maxRetries: 3,
   clothingAmount: 'as-is',
-  targetSpecies: 'Original'
+  targetSpecies: 'Original',
+  techLevel: 'Original'
 };
 
 export const MODELS = {
@@ -78,4 +83,17 @@ export const MODELS = {
 
 export const SPECIES_LIST: Species[] = [
   'Original', 'Human', 'Vulcan', 'Klingon', 'Elf', 'Half-Elf', 'Gnome', 'Dwarf', 'Halfling', 'Mermaid', 'Angel', 'Demon'
+];
+
+export const TECH_LEVELS: TechLevel[] = [
+  'Original', 
+  'Primitive', 
+  'Ancient', 
+  'Medieval', 
+  'Renaissance', 
+  'Industrial', 
+  'Modern', 
+  'Cyberpunk', 
+  'Sci-Fi', 
+  'Far Future'
 ];

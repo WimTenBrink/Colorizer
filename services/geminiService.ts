@@ -1,4 +1,5 @@
 
+
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { AppSettings } from "../types";
 
@@ -128,6 +129,39 @@ export class GeminiService {
       // Species Transformation
       if (settings.targetSpecies && settings.targetSpecies !== 'Original') {
         basePrompt += ` Transform the character into a ${settings.targetSpecies}. Add characteristic features of a ${settings.targetSpecies} while maintaining the original pose and identity.`;
+      }
+
+      // Tech Level Transformation
+      if (settings.techLevel && settings.techLevel !== 'Original') {
+         switch (settings.techLevel) {
+            case 'Primitive':
+               basePrompt += " Transform the setting and artifacts to a primitive, stone-age level. Use natural materials like stone, wood, and bone. Characters should wear furs or simple skins.";
+               break;
+            case 'Ancient':
+               basePrompt += " Transform the setting to an Ancient era (like Rome, Greece, or Egypt). Use classical architecture, sandals, tunics, and bronze/iron age technology.";
+               break;
+            case 'Medieval':
+               basePrompt += " Transform the setting to the Medieval period. Use castles, stone masonry, plate or leather armor, swords, and rustic clothing.";
+               break;
+            case 'Renaissance':
+               basePrompt += " Transform the setting to the Renaissance period. Focus on ornate clothing, artistic flourishes, early firearms, and classical revival architecture.";
+               break;
+            case 'Industrial':
+               basePrompt += " Transform the setting to the Early Industrial/Steampunk era. Use steam power, gears, brass, brick factories, and Victorian-style clothing.";
+               break;
+            case 'Modern':
+               basePrompt += " Transform the setting to the Modern day. Use contemporary fashion, smartphones, cars, and modern architecture.";
+               break;
+            case 'Cyberpunk':
+               basePrompt += " Transform the setting to a Cyberpunk Near Future. Use neon lights, high-tech implants, holograms, dirty high-tech aesthetic, and synthetic materials.";
+               break;
+            case 'Sci-Fi':
+               basePrompt += " Transform the setting to a clean Sci-Fi Future. Use spaceships, lasers, smooth white surfaces, advanced robotics, and tight-fitting functional suits.";
+               break;
+            case 'Far Future':
+               basePrompt += " Transform the setting to the Far Future. Use unrecognizable advanced technology, energy beings, organic-tech hybrids, and surreal landscapes.";
+               break;
+         }
       }
 
       // Clothing Adjustment
