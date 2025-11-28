@@ -48,7 +48,6 @@ export interface AppSettings {
   fixErrors: boolean; 
 
   // Dropdowns
-  maxRetries: 1 | 3 | 5 | 'infinite';
   clothingAmount: 'as-is' | 'more' | 'less';
   targetSpecies: Species;
   techLevel: TechLevel;
@@ -68,7 +67,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   extractCharacter: false,
   fixErrors: true, 
 
-  maxRetries: 3,
   clothingAmount: 'as-is',
   targetSpecies: 'Original',
   techLevel: 'Original',

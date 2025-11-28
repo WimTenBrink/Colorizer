@@ -1,8 +1,10 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Console } from './components/Console';
 import { SettingsModal } from './components/SettingsModal';
 import { ManualModal } from './components/ManualModal';
 import { GeminiService } from './services/geminiService';
+import { loadQueue, syncQueue } from './services/storageService';
 import { LogEntry, QueueItem, ProcessedItem, AppSettings, DEFAULT_SETTINGS, SPECIES_LIST, Species, TECH_LEVELS, TechLevel, AGE_GROUPS, AgeGroup, FOOTWEAR_OPTIONS, Footwear } from './types';
 import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Trash2, RotateCcw, Maximize2, Eraser, ChevronLeft, ChevronRight, RefreshCw, Footprints, SlidersHorizontal, ChevronDown, Mountain, PenTool, BookOpen, Scissors, Pause, Play, Wand2, Shirt, UserRoundCog, Cpu, Book, Baby, Hourglass, AlertTriangle } from 'lucide-react';
 
@@ -13,6 +15,14 @@ if (typeof process === 'undefined') {
   (process as any).env = {};
 }
 
+interface ZoomState {
+  id?: string;
+  url: string;
+  name: string;
+  originalUrl?: string;
+  isProcessed: boolean;
+}
+
 const App: React.FC = () => {
   // State
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -20,7 +30,10 @@ const App: React.FC = () => {
   const [processed, setProcessed] = useState<ProcessedItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [zoomedItem, setZoomedItem] = useState<ProcessedItem | null>(null);
+  const [zoomedItem, setZoomedItem] = useState<ZoomState | null>(null);
+  
+  // Storage State
+  const [isStorageInitialized, setIsStorageInitialized] = useState(false);
   
   // Error History State
   const [recentErrors, setRecentErrors] = useState<string[]>([]);
@@ -33,7 +46,8 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings>(() => {
     try {
       const saved = localStorage.getItem('katje-settings');
-      return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+      // Merge saved settings with default to handle removed keys (maxRetries)
+      return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
     } catch (e) {
       return DEFAULT_SETTINGS;
     }
@@ -68,6 +82,27 @@ const App: React.FC = () => {
     localStorage.setItem('katje-settings', JSON.stringify(settings));
   }, [settings]);
 
+  // Load Queue from Storage on Mount
+  useEffect(() => {
+    const initQueue = async () => {
+      const savedQueue = await loadQueue();
+      if (savedQueue.length > 0) {
+        setQueue(savedQueue);
+        // We don't want to spam logs on reload, but maybe one info log
+        // addLog('INFO', `Restored ${savedQueue.length} items from storage`, {});
+      }
+      setIsStorageInitialized(true);
+    };
+    initQueue();
+  }, []);
+
+  // Sync Queue to Storage on Change
+  useEffect(() => {
+    if (isStorageInitialized) {
+      syncQueue(queue);
+    }
+  }, [queue, isStorageInitialized]);
+
   // Check API Key on Mount & Auto-open Settings if missing
   useEffect(() => {
     const checkKey = async () => {
@@ -93,6 +128,7 @@ const App: React.FC = () => {
   const geminiService = useRef(new GeminiService());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const optionsRef = useRef<HTMLDivElement>(null);
+  const lastRequestTime = useRef<number>(0);
   
   // Download Queue Refs
   const downloadQueueRef = useRef<{url: string, filename: string}[]>([]);
@@ -191,9 +227,20 @@ const App: React.FC = () => {
     if (nextItemIndex === -1) return;
 
     const item = queue[nextItemIndex];
-    setIsProcessing(true);
+    setIsProcessing(true); // Lock processing immediately
 
-    // Update status to processing
+    // Throttling: Ensure max 60 requests per minute (1 per second)
+    // We wait here to ensure spacing between START times of requests
+    const now = Date.now();
+    const timeSinceLast = now - lastRequestTime.current;
+    const MIN_DELAY = 1000;
+
+    if (timeSinceLast < MIN_DELAY) {
+      await new Promise(resolve => setTimeout(resolve, MIN_DELAY - timeSinceLast));
+    }
+    lastRequestTime.current = Date.now();
+
+    // Update status to processing (UI update)
     setQueue(prev => prev.map((q, i) => i === nextItemIndex ? { ...q, status: 'processing', errorMessage: undefined } : q));
 
     try {
@@ -273,19 +320,8 @@ const App: React.FC = () => {
       setQueue(prev => {
         return prev.map(q => {
           if (q.id === item.id) {
-            // Retry Logic
-            const currentRetryCount = q.retryCount || 0;
-            const maxRetries = settings.maxRetries === 'infinite' ? Infinity : settings.maxRetries;
-            
-            if (currentRetryCount < maxRetries) {
-              const newCount = currentRetryCount + 1;
-              console.log(`Retrying item ${q.originalName}. Attempt ${newCount} of ${maxRetries}`);
-              // Set status back to pending to be picked up again
-              return { ...q, status: 'pending', retryCount: newCount, errorMessage: errMsg };
-            } else {
-               // Move to error state if max retries reached
-               return { ...q, status: 'error', errorMessage: errMsg };
-            }
+             // NO AUTO RETRY - Move directly to error state
+             return { ...q, status: 'error', errorMessage: errMsg };
           }
           return q;
         });
@@ -305,18 +341,32 @@ const App: React.FC = () => {
 
   // Zoom Navigation Logic
   const handleZoomNext = useCallback(() => {
-    if (!zoomedItem) return;
+    if (!zoomedItem || !zoomedItem.isProcessed || !zoomedItem.id) return;
     const idx = processed.findIndex(p => p.id === zoomedItem.id);
     if (idx !== -1 && idx < processed.length - 1) {
-      setZoomedItem(processed[idx + 1]);
+      const next = processed[idx + 1];
+      setZoomedItem({ 
+          id: next.id, 
+          url: next.processedUrl, 
+          name: next.fileName, 
+          originalUrl: next.originalUrl, 
+          isProcessed: true 
+      });
     }
   }, [zoomedItem, processed]);
 
   const handleZoomPrev = useCallback(() => {
-    if (!zoomedItem) return;
+    if (!zoomedItem || !zoomedItem.isProcessed || !zoomedItem.id) return;
     const idx = processed.findIndex(p => p.id === zoomedItem.id);
     if (idx > 0) {
-      setZoomedItem(processed[idx - 1]);
+      const prev = processed[idx - 1];
+      setZoomedItem({ 
+          id: prev.id, 
+          url: prev.processedUrl, 
+          name: prev.fileName, 
+          originalUrl: prev.originalUrl, 
+          isProcessed: true 
+      });
     }
   }, [zoomedItem, processed]);
 
@@ -409,6 +459,13 @@ const App: React.FC = () => {
         ? { ...item, status: 'pending', errorMessage: undefined, retryCount: 0 }
         : item
     ));
+  };
+  
+  const handleClearQueue = () => {
+    if (window.confirm('Are you sure you want to clear the upload queue?')) {
+      setQueue([]);
+      addLog('INFO', 'Queue cleared by user');
+    }
   };
 
   // Filter queues for display
@@ -517,19 +574,6 @@ const App: React.FC = () => {
                     {/* Processing Settings */}
                     <div>
                       <h4 className="text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-2"><RefreshCw size={12}/> Processing</h4>
-                      <div className="flex items-center justify-between text-sm text-gray-300 mb-2">
-                        <span>Retries on Failure</span>
-                        <select 
-                          value={settings.maxRetries} 
-                          onChange={(e) => setSettings(s => ({ ...s, maxRetries: e.target.value === 'infinite' ? 'infinite' : Number(e.target.value) as any }))}
-                          className="bg-black/30 border border-gray-600 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none"
-                        >
-                          <option value={1}>1 Retry</option>
-                          <option value={3}>3 Retries</option>
-                          <option value={5}>5 Retries</option>
-                          <option value="infinite">Infinite</option>
-                        </select>
-                      </div>
                       
                       <div className="grid grid-cols-4 gap-1">
                          {/* Resolution (Pro Models) */}
@@ -797,7 +841,10 @@ const App: React.FC = () => {
              )}
              {errorQueue.map((item) => (
                <div key={item.id} className="flex flex-col p-3 bg-[#161b22] rounded-xl border border-red-900/30 relative group shadow-lg">
-                 <div className="w-full aspect-square bg-gray-800 rounded-lg overflow-hidden relative mb-3">
+                 <div 
+                    className="w-full aspect-square bg-gray-800 rounded-lg overflow-hidden relative mb-3 cursor-pointer"
+                    onClick={() => setZoomedItem({ url: item.previewUrl, name: item.originalName, isProcessed: false })}
+                 >
                    <img src={item.previewUrl} alt="" className="w-full h-full object-cover opacity-50" />
                    <div className="absolute inset-0 flex items-center justify-center">
                      <AlertCircle size={32} className="text-red-500" />
@@ -849,7 +896,13 @@ const App: React.FC = () => {
                   <div 
                     key={item.id} 
                     className="group relative bg-[#161b22] rounded-xl overflow-hidden shadow-xl border border-gray-800 transition-transform hover:-translate-y-1 cursor-pointer"
-                    onClick={() => setZoomedItem(item)}
+                    onClick={() => setZoomedItem({ 
+                        id: item.id,
+                        url: item.processedUrl, 
+                        name: item.fileName, 
+                        originalUrl: item.originalUrl,
+                        isProcessed: true
+                    })}
                   >
                     <div className="aspect-[4/3] bg-gray-900 overflow-hidden relative">
                       <img 
@@ -881,7 +934,18 @@ const App: React.FC = () => {
         >
           <div className="p-6 border-b border-gray-800">
             <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center justify-between">
-              Upload Queue
+              <span className="flex items-center gap-2">
+                Upload Queue
+                {activeQueue.length > 0 && (
+                  <button 
+                    onClick={handleClearQueue}
+                    className="p-1 hover:bg-gray-800 rounded text-gray-500 hover:text-red-400 transition-colors"
+                    title="Clear Queue"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </span>
               {isPaused && <span className="text-yellow-500 text-xs bg-yellow-900/20 px-2 py-0.5 rounded border border-yellow-500/30">PAUSED</span>}
             </h2>
             
@@ -909,11 +973,14 @@ const App: React.FC = () => {
              )}
              {activeQueue.map((item) => (
                <div key={item.id} className="flex flex-col p-3 bg-[#0d1117] rounded-xl border border-gray-800 relative group animate-in slide-in-from-right-2 duration-300 shadow-lg">
-                 <div className="w-full aspect-square bg-gray-800 rounded-lg overflow-hidden mb-3 relative">
+                 <div 
+                    className="w-full aspect-square bg-gray-800 rounded-lg overflow-hidden mb-3 relative cursor-pointer"
+                    onClick={() => setZoomedItem({ url: item.previewUrl, name: item.originalName, isProcessed: false })}
+                 >
                    <img src={item.previewUrl} alt="" className="w-full h-full object-cover" />
                    {item.status === 'pending' && (
                     <button 
-                      onClick={() => setQueue(q => q.filter(i => i.id !== item.id))}
+                      onClick={(e) => { e.stopPropagation(); setQueue(q => q.filter(i => i.id !== item.id)); }}
                       className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded hover:bg-red-500 transition-colors opacity-0 group-hover:opacity-100"
                     >
                       <Trash2 size={14} />
@@ -974,26 +1041,26 @@ const App: React.FC = () => {
              if (e.target === e.currentTarget) setZoomedItem(null);
           }}
         >
-          {/* Navigation Buttons */}
+          {/* Navigation Buttons - Only for processed gallery items */}
           <button 
             onClick={(e) => { e.stopPropagation(); handleZoomPrev(); }}
-            className="absolute left-4 p-4 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-all disabled:opacity-20 disabled:cursor-not-allowed"
-            disabled={processed.findIndex(p => p.id === zoomedItem.id) === 0}
+            className={`absolute left-4 p-4 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-all disabled:opacity-20 disabled:cursor-not-allowed ${!zoomedItem.isProcessed ? 'hidden' : ''}`}
+            disabled={!zoomedItem.isProcessed || processed.findIndex(p => p.id === zoomedItem.id) === 0}
           >
             <ChevronLeft size={48} />
           </button>
 
           <button 
             onClick={(e) => { e.stopPropagation(); handleZoomNext(); }}
-            className="absolute right-4 p-4 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-all disabled:opacity-20 disabled:cursor-not-allowed"
-            disabled={processed.findIndex(p => p.id === zoomedItem.id) === processed.length - 1}
+            className={`absolute right-4 p-4 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-all disabled:opacity-20 disabled:cursor-not-allowed ${!zoomedItem.isProcessed ? 'hidden' : ''}`}
+            disabled={!zoomedItem.isProcessed || processed.findIndex(p => p.id === zoomedItem.id) === processed.length - 1}
           >
             <ChevronRight size={48} />
           </button>
 
           <img 
-            src={zoomedItem.processedUrl} 
-            alt={zoomedItem.fileName} 
+            src={zoomedItem.url} 
+            alt={zoomedItem.name} 
             className="max-w-[90vw] max-h-[90vh] object-contain shadow-2xl rounded-sm pointer-events-none select-none"
           />
           
@@ -1005,10 +1072,17 @@ const App: React.FC = () => {
               <Trash2 size={24} className="rotate-45" />
             </button>
           </div>
-
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/50 text-sm bg-black/50 px-4 py-2 rounded-full">
-            {processed.findIndex(p => p.id === zoomedItem.id) + 1} / {processed.length} • Use arrow keys to navigate
+          
+          <div className="absolute top-6 left-6 text-white text-lg font-bold drop-shadow-md">
+              {zoomedItem.name}
+              {!zoomedItem.isProcessed && <span className="ml-2 text-xs bg-yellow-600 px-2 py-1 rounded">PREVIEW</span>}
           </div>
+
+          {zoomedItem.isProcessed && (
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/50 text-sm bg-black/50 px-4 py-2 rounded-full">
+              {processed.findIndex(p => p.id === zoomedItem.id) + 1} / {processed.length} • Use arrow keys to navigate
+            </div>
+          )}
         </div>
       )}
     </div>
