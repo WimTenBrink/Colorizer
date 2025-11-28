@@ -1,11 +1,10 @@
-
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Console } from './components/Console';
 import { SettingsModal } from './components/SettingsModal';
+import { ManualModal } from './components/ManualModal';
 import { GeminiService } from './services/geminiService';
-import { LogEntry, QueueItem, ProcessedItem, AppSettings, DEFAULT_SETTINGS, SPECIES_LIST, Species, TECH_LEVELS, TechLevel } from './types';
-import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Trash2, RotateCcw, Maximize2, Eraser, ChevronLeft, ChevronRight, RefreshCw, Footprints, SlidersHorizontal, ChevronDown, Mountain, PenTool, BookOpen, Scissors, Pause, Play, Wand2, Shirt, UserRoundCog, Cpu } from 'lucide-react';
+import { LogEntry, QueueItem, ProcessedItem, AppSettings, DEFAULT_SETTINGS, SPECIES_LIST, Species, TECH_LEVELS, TechLevel, AGE_GROUPS, AgeGroup, FOOTWEAR_OPTIONS, Footwear } from './types';
+import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Trash2, RotateCcw, Maximize2, Eraser, ChevronLeft, ChevronRight, RefreshCw, Footprints, SlidersHorizontal, ChevronDown, Mountain, PenTool, BookOpen, Scissors, Pause, Play, Wand2, Shirt, UserRoundCog, Cpu, Book, Baby, Hourglass, AlertTriangle } from 'lucide-react';
 
 // Polyfill process.env for browser environments if needed
 if (typeof process === 'undefined') {
@@ -23,6 +22,10 @@ const App: React.FC = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [zoomedItem, setZoomedItem] = useState<ProcessedItem | null>(null);
   
+  // Error History State
+  const [recentErrors, setRecentErrors] = useState<string[]>([]);
+  const [showErrorHistory, setShowErrorHistory] = useState(false);
+  
   // API Key State (Manual + System)
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('katje-api-key') || '');
 
@@ -39,6 +42,7 @@ const App: React.FC = () => {
   // UI State
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isManualOpen, setIsManualOpen] = useState(false);
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -119,7 +123,26 @@ const App: React.FC = () => {
       title,
       details
     };
-    setLogs(prev => [entry, ...prev]);
+    // Limit logs to latest 100 entries
+    setLogs(prev => [entry, ...prev].slice(0, 100));
+
+    // Capture Errors for Header Display
+    if (type === 'ERROR') {
+      let msg = title;
+      if (details) {
+         if (typeof details === 'string') msg = details;
+         else if (details.message) msg = details.message;
+         else if (details.error && details.error.message) msg = details.error.message;
+      }
+      
+      const cleanMsg = String(msg || 'Unknown Error').substring(0, 100);
+      
+      setRecentErrors(prev => {
+        // Add to top, remove duplicates (distinct), keep max 5
+        const distinct = [cleanMsg, ...prev.filter(e => e !== cleanMsg)];
+        return distinct.slice(0, 5);
+      });
+    }
   }, []);
 
   // Helper: Download Queue Processor
@@ -198,7 +221,8 @@ const App: React.FC = () => {
           timestamp: Date.now()
         };
 
-        setProcessed(prev => [processedItem, ...prev]);
+        // Limit processed items to latest 50
+        setProcessed(prev => [processedItem, ...prev].slice(0, 50));
 
         // Auto Download Image using Queue
         queueDownload(result.imageUrl, `${result.filename}.png`);
@@ -418,6 +442,36 @@ const App: React.FC = () => {
             {isPaused ? <Play size={20} className="fill-current" /> : <Pause size={20} className="fill-current" />}
           </button>
 
+          {/* Error Display */}
+          {recentErrors.length > 0 && (
+            <div className="relative z-50">
+                <button 
+                  onClick={() => setShowErrorHistory(!showErrorHistory)}
+                  className="flex items-center gap-2 max-w-[200px] md:max-w-[300px] px-3 py-1.5 bg-red-950/30 border border-red-900/50 rounded-lg text-xs font-bold text-red-500 hover:bg-red-950/50 transition-colors animate-in fade-in"
+                >
+                   <AlertTriangle size={14} className="shrink-0" />
+                   <span className="truncate">{recentErrors[0]}</span>
+                   {recentErrors.length > 1 && <ChevronDown size={12} className="opacity-50" />}
+                </button>
+                {showErrorHistory && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setShowErrorHistory(false)} />
+                    <div className="absolute top-full left-0 mt-2 w-80 bg-[#161b22] border border-red-900/50 rounded-xl shadow-2xl z-40 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex items-center justify-between px-3 py-2 bg-red-950/30 border-b border-red-900/30">
+                            <span className="text-[10px] font-bold text-red-400 uppercase">Recent Errors</span>
+                             <button onClick={(e) => { e.stopPropagation(); setRecentErrors([]); setShowErrorHistory(false); }} className="text-red-400 hover:text-white p-1 rounded hover:bg-red-900/50 transition-colors"><Trash2 size={12} /></button>
+                        </div>
+                        {recentErrors.map((err, i) => (
+                            <div key={i} className={`px-3 py-2 text-xs text-red-300 border-b border-red-900/10 last:border-0 ${i === 0 ? 'bg-red-900/10 font-medium' : ''}`}>
+                                {err}
+                            </div>
+                        ))}
+                    </div>
+                  </>
+                )}
+            </div>
+          )}
+
           {/* Stats Bar */}
           <div className="hidden lg:flex items-center gap-2 bg-[#0d1117] px-3 py-1.5 rounded-lg border border-gray-800">
              <div className="flex items-center gap-1.5 px-2 border-r border-gray-800">
@@ -516,22 +570,6 @@ const App: React.FC = () => {
                         <div className={`w-3 h-3 rounded-full ${settings.fixErrors ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-gray-600'}`} />
                       </button>
 
-                       {/* Barefoot */}
-                      <button
-                        onClick={() => setSettings(s => ({ ...s, barefootMode: !s.barefootMode }))}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                          settings.barefootMode 
-                            ? 'bg-pink-900/30 text-pink-300 border border-pink-700/50' 
-                            : 'bg-gray-800/50 text-gray-400 hover:bg-gray-800 border border-transparent'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Footprints size={14} />
-                          <span>Barefoot Mode</span>
-                        </div>
-                        <div className={`w-3 h-3 rounded-full ${settings.barefootMode ? 'bg-pink-500 shadow-[0_0_8px_rgba(236,72,153,0.5)]' : 'bg-gray-600'}`} />
-                      </button>
-                      
                       {/* Extract Character */}
                       <button
                         onClick={() => setSettings(s => ({ ...s, extractCharacter: !s.extractCharacter }))}
@@ -605,20 +643,6 @@ const App: React.FC = () => {
                      <div className="space-y-3">
                       <h4 className="text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-2"><UserRoundCog size={12}/> Transformations</h4>
                       
-                      {/* Clothing Amount */}
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Shirt size={12}/> Clothing</label>
-                        <select 
-                          value={settings.clothingAmount}
-                          onChange={(e) => setSettings(s => ({ ...s, clothingAmount: e.target.value as any }))}
-                          className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
-                        >
-                          <option value="as-is">As Is (Default)</option>
-                          <option value="more">More Clothing</option>
-                          <option value="less">Fewer Clothes</option>
-                        </select>
-                      </div>
-
                       {/* Species */}
                       <div className="space-y-1">
                         <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><UserRoundCog size={12}/> Species</label>
@@ -633,6 +657,20 @@ const App: React.FC = () => {
                         </select>
                       </div>
 
+                      {/* Age Group */}
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Baby size={12}/> Age Group</label>
+                        <select 
+                          value={settings.targetAge}
+                          onChange={(e) => setSettings(s => ({ ...s, targetAge: e.target.value as AgeGroup }))}
+                          className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
+                        >
+                          {AGE_GROUPS.map(age => (
+                            <option key={age} value={age}>{age}</option>
+                          ))}
+                        </select>
+                      </div>
+
                       {/* Tech Level */}
                       <div className="space-y-1">
                         <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Cpu size={12}/> Tech Level</label>
@@ -643,6 +681,34 @@ const App: React.FC = () => {
                         >
                           {TECH_LEVELS.map(tl => (
                             <option key={tl} value={tl}>{tl}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Clothing Amount */}
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Shirt size={12}/> Clothing</label>
+                        <select 
+                          value={settings.clothingAmount}
+                          onChange={(e) => setSettings(s => ({ ...s, clothingAmount: e.target.value as any }))}
+                          className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
+                        >
+                          <option value="as-is">As Is (Default)</option>
+                          <option value="more">More Clothing</option>
+                          <option value="less">Fewer Clothes</option>
+                        </select>
+                      </div>
+
+                      {/* Footwear */}
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Footprints size={12}/> Footwear</label>
+                        <select 
+                          value={settings.footwear}
+                          onChange={(e) => setSettings(s => ({ ...s, footwear: e.target.value as Footwear }))}
+                          className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
+                        >
+                          {FOOTWEAR_OPTIONS.map(fw => (
+                            <option key={fw} value={fw}>{fw}</option>
                           ))}
                         </select>
                       </div>
@@ -672,6 +738,13 @@ const App: React.FC = () => {
                <span className="hidden sm:inline">Clear Gallery</span>
              </button>
            )}
+           <button 
+            onClick={() => setIsManualOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm font-medium transition-all"
+          >
+            <Book size={16} />
+            <span className="hidden sm:inline">Manual</span>
+          </button>
            <button 
             onClick={() => setIsSettingsOpen(true)}
             className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm font-medium transition-all"
@@ -876,6 +949,11 @@ const App: React.FC = () => {
         onClose={() => setIsConsoleOpen(false)} 
         logs={logs} 
         onClear={() => setLogs([])}
+      />
+      
+      <ManualModal
+        isOpen={isManualOpen}
+        onClose={() => setIsManualOpen(false)}
       />
       
       <SettingsModal 

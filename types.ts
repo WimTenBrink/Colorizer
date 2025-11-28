@@ -30,6 +30,10 @@ export type Species = 'Original' | 'Human' | 'Vulcan' | 'Klingon' | 'Elf' | 'Hal
 
 export type TechLevel = 'Original' | 'Primitive' | 'Ancient' | 'Medieval' | 'Renaissance' | 'Industrial' | 'Modern' | 'Cyberpunk' | 'Sci-Fi' | 'Far Future';
 
+export type AgeGroup = 'Original' | 'Preteen' | 'Teenager' | 'Young Adult' | 'Adult' | 'Middle-Aged' | 'Elderly';
+
+export type Footwear = 'Original' | 'Barefoot' | 'Sandals' | 'Anklets' | 'Clogs' | 'Sneakers' | 'Boots' | 'Shoes' | 'Leather Wraps';
+
 export interface AppSettings {
   geminiModel: string;
   imagenModel: string;
@@ -37,7 +41,6 @@ export interface AppSettings {
   resolution: '1K' | '2K' | '4K' | '8K';
   
   // Toggles
-  barefootMode: boolean;
   removeBackground: boolean;
   revertToLineArt: boolean;
   describeMode: boolean;
@@ -48,7 +51,9 @@ export interface AppSettings {
   maxRetries: 1 | 3 | 5 | 'infinite';
   clothingAmount: 'as-is' | 'more' | 'less';
   targetSpecies: Species;
-  techLevel: TechLevel; // New
+  techLevel: TechLevel;
+  targetAge: AgeGroup; // New
+  footwear: Footwear; // New
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -57,7 +62,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   customPrompt: '',
   resolution: '4K',
   
-  barefootMode: false,
   removeBackground: false,
   revertToLineArt: false,
   describeMode: false,
@@ -67,7 +71,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   maxRetries: 3,
   clothingAmount: 'as-is',
   targetSpecies: 'Original',
-  techLevel: 'Original'
+  techLevel: 'Original',
+  targetAge: 'Original',
+  footwear: 'Original'
 };
 
 export const MODELS = {
@@ -96,4 +102,26 @@ export const TECH_LEVELS: TechLevel[] = [
   'Cyberpunk', 
   'Sci-Fi', 
   'Far Future'
+];
+
+export const AGE_GROUPS: AgeGroup[] = [
+  'Original',
+  'Preteen',
+  'Teenager',
+  'Young Adult',
+  'Adult',
+  'Middle-Aged',
+  'Elderly'
+];
+
+export const FOOTWEAR_OPTIONS: Footwear[] = [
+  'Original',
+  'Barefoot',
+  'Sandals',
+  'Anklets',
+  'Clogs',
+  'Sneakers',
+  'Boots',
+  'Shoes',
+  'Leather Wraps'
 ];
