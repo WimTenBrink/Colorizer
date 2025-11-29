@@ -5,7 +5,8 @@ import { ManualModal } from './components/ManualModal';
 import { QueueManagementModal } from './components/QueueManagementModal';
 import { GeminiService } from './services/geminiService';
 import { loadQueue, syncQueue } from './services/storageService';
-import { LogEntry, QueueItem, ProcessedItem, AppSettings, DEFAULT_SETTINGS, SPECIES_LIST, Species, TECH_LEVELS, TechLevel, AGE_GROUPS, AgeGroup, FOOTWEAR_OPTIONS, Footwear, BACKGROUND_OPTIONS, BackgroundType } from './types';
+import { LogEntry, QueueItem, ProcessedItem, AppSettings, DEFAULT_SETTINGS } from './types';
+import { PROMPT_CONFIG } from './promptOptions';
 import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Trash2, RotateCcw, Maximize2, Eraser, ChevronLeft, ChevronRight, RefreshCw, Footprints, SlidersHorizontal, ChevronDown, Mountain, PenTool, BookOpen, Scissors, Pause, Play, Wand2, Shirt, UserRoundCog, Cpu, Book, Baby, Hourglass, AlertTriangle } from 'lucide-react';
 
 // Polyfill process.env for browser environments if needed
@@ -23,7 +24,8 @@ interface ZoomState {
   isProcessed: boolean;
 }
 
-const App: React.FC = () => {
+// Fix: Export App component so it can be imported by index.tsx
+export const App: React.FC = () => {
   // State
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -154,13 +156,13 @@ const App: React.FC = () => {
 
 
   // Helper: Logging
-  const addLog = useCallback((type: LogEntry['type'], title: string, details: any) => {
+  const addLog = useCallback((type: LogEntry['type'], title: string, details: any = {}) => {
     const entry: LogEntry = {
       id: crypto.randomUUID(),
       timestamp: new Date().toLocaleTimeString(),
       type,
       title,
-      details
+      details: details || {}
     };
     // Limit logs to latest 100 entries
     setLogs(prev => [entry, ...prev].slice(0, 100));
@@ -700,12 +702,12 @@ const App: React.FC = () => {
                         <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Mountain size={12}/> Background</label>
                         <select 
                           value={settings.background}
-                          onChange={(e) => setSettings(s => ({ ...s, background: e.target.value as any }))}
+                          onChange={(e) => setSettings(s => ({ ...s, background: e.target.value }))}
                           disabled={settings.revertToLineArt || settings.extractCharacter}
                           className={`w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none ${settings.revertToLineArt || settings.extractCharacter ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
-                          {BACKGROUND_OPTIONS.map(bg => (
-                            <option key={bg} value={bg}>{bg}</option>
+                          {PROMPT_CONFIG.backgrounds.map(bg => (
+                            <option key={bg.value} value={bg.value}>{bg.label}</option>
                           ))}
                         </select>
                       </div>
@@ -715,11 +717,11 @@ const App: React.FC = () => {
                         <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><UserRoundCog size={12}/> Species</label>
                         <select 
                           value={settings.targetSpecies}
-                          onChange={(e) => setSettings(s => ({ ...s, targetSpecies: e.target.value as Species }))}
+                          onChange={(e) => setSettings(s => ({ ...s, targetSpecies: e.target.value }))}
                           className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
                         >
-                          {SPECIES_LIST.map(sp => (
-                            <option key={sp} value={sp}>{sp}</option>
+                          {PROMPT_CONFIG.species.map(sp => (
+                            <option key={sp.value} value={sp.value}>{sp.label}</option>
                           ))}
                         </select>
                       </div>
@@ -729,11 +731,11 @@ const App: React.FC = () => {
                         <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Baby size={12}/> Age Group</label>
                         <select 
                           value={settings.targetAge}
-                          onChange={(e) => setSettings(s => ({ ...s, targetAge: e.target.value as AgeGroup }))}
+                          onChange={(e) => setSettings(s => ({ ...s, targetAge: e.target.value }))}
                           className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
                         >
-                          {AGE_GROUPS.map(age => (
-                            <option key={age} value={age}>{age}</option>
+                          {PROMPT_CONFIG.ageGroups.map(age => (
+                            <option key={age.value} value={age.value}>{age.label}</option>
                           ))}
                         </select>
                       </div>
@@ -743,11 +745,11 @@ const App: React.FC = () => {
                         <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Cpu size={12}/> Tech Level</label>
                         <select 
                           value={settings.techLevel}
-                          onChange={(e) => setSettings(s => ({ ...s, techLevel: e.target.value as TechLevel }))}
+                          onChange={(e) => setSettings(s => ({ ...s, techLevel: e.target.value }))}
                           className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
                         >
-                          {TECH_LEVELS.map(tl => (
-                            <option key={tl} value={tl}>{tl}</option>
+                          {PROMPT_CONFIG.techLevels.map(tl => (
+                            <option key={tl.value} value={tl.value}>{tl.label}</option>
                           ))}
                         </select>
                       </div>
@@ -757,12 +759,12 @@ const App: React.FC = () => {
                         <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Shirt size={12}/> Clothing</label>
                         <select 
                           value={settings.clothingAmount}
-                          onChange={(e) => setSettings(s => ({ ...s, clothingAmount: e.target.value as any }))}
+                          onChange={(e) => setSettings(s => ({ ...s, clothingAmount: e.target.value }))}
                           className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
                         >
-                          <option value="as-is">As Is (Default)</option>
-                          <option value="more">More Clothing</option>
-                          <option value="less">Fewer Clothes</option>
+                          {PROMPT_CONFIG.clothing.map(cl => (
+                             <option key={cl.value} value={cl.value}>{cl.label}</option>
+                          ))}
                         </select>
                       </div>
 
@@ -771,11 +773,11 @@ const App: React.FC = () => {
                         <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Footprints size={12}/> Footwear</label>
                         <select 
                           value={settings.footwear}
-                          onChange={(e) => setSettings(s => ({ ...s, footwear: e.target.value as Footwear }))}
+                          onChange={(e) => setSettings(s => ({ ...s, footwear: e.target.value }))}
                           className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
                         >
-                          {FOOTWEAR_OPTIONS.map(fw => (
-                            <option key={fw} value={fw}>{fw}</option>
+                          {PROMPT_CONFIG.footwear.map(fw => (
+                            <option key={fw.value} value={fw.value}>{fw.label}</option>
                           ))}
                         </select>
                       </div>
@@ -1141,5 +1143,3 @@ const App: React.FC = () => {
     </div>
   );
 };
-
-export default App;

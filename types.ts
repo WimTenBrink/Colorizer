@@ -1,5 +1,3 @@
-
-
 export interface LogEntry {
   id: string;
   timestamp: string;
@@ -26,35 +24,23 @@ export interface ProcessedItem {
   timestamp: number;
 }
 
-export type Species = 'Original' | 'Human' | 'Vulcan' | 'Klingon' | 'Elf' | 'Half-Elf' | 'Gnome' | 'Dwarf' | 'Halfling' | 'Mermaid' | 'Angel' | 'Demon';
+// Configuration Interfaces
+export interface PromptOption {
+  value: string;
+  label: string;
+  prompt: string;
+}
 
-export type TechLevel = 'Original' | 'Primitive' | 'Ancient' | 'Medieval' | 'Renaissance' | 'Industrial' | 'Modern' | 'Cyberpunk' | 'Sci-Fi' | 'Far Future';
+export interface PromptConfig {
+  species: PromptOption[];
+  techLevels: PromptOption[];
+  ageGroups: PromptOption[];
+  footwear: PromptOption[];
+  backgrounds: PromptOption[];
+  clothing: PromptOption[];
+}
 
-export type AgeGroup = 'Original' | 'Preteen' | 'Teenager' | 'Young Adult' | 'Adult' | 'Middle-Aged' | 'Elderly';
-
-export type Footwear = 'Original' | 'Barefoot' | 'Sandals' | 'Anklets' | 'Clogs' | 'Sneakers' | 'Boots' | 'Shoes' | 'Leather Wraps';
-
-export type BackgroundType = 
-  'Original' | 
-  'Transparent' | 
-  'Beach' | 
-  'Forest' | 
-  'Plains' | 
-  'Snow' | 
-  'Desert' | 
-  'Sea' | 
-  'Rivers' | 
-  'City' | 
-  'Village' | 
-  'Spaceship' | 
-  'Moon' | 
-  'Mars' | 
-  'Mountains' | 
-  'Jungle' | 
-  'Castle' | 
-  'Library' | 
-  'Laboratory';
-
+// Settings Interface - using string to allow dynamic loading from config
 export interface AppSettings {
   geminiModel: string;
   imagenModel: string;
@@ -62,19 +48,18 @@ export interface AppSettings {
   resolution: '1K' | '2K' | '4K' | '8K';
   
   // Toggles
-  // removeBackground: boolean; // Removed in favor of background dropdown
-  background: BackgroundType;
+  background: string;
   revertToLineArt: boolean;
   describeMode: boolean;
   extractCharacter: boolean;
   fixErrors: boolean; 
 
   // Dropdowns
-  clothingAmount: 'as-is' | 'more' | 'less';
-  targetSpecies: Species;
-  techLevel: TechLevel;
-  targetAge: AgeGroup;
-  footwear: Footwear;
+  clothingAmount: string;
+  targetSpecies: string;
+  techLevel: string;
+  targetAge: string;
+  footwear: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -106,64 +91,3 @@ export const MODELS = {
     { id: 'gemini-3-pro-image-preview', name: 'Gemini 3.0 Pro Image' },
   ]
 };
-
-export const SPECIES_LIST: Species[] = [
-  'Original', 'Human', 'Vulcan', 'Klingon', 'Elf', 'Half-Elf', 'Gnome', 'Dwarf', 'Halfling', 'Mermaid', 'Angel', 'Demon'
-];
-
-export const TECH_LEVELS: TechLevel[] = [
-  'Original', 
-  'Primitive', 
-  'Ancient', 
-  'Medieval', 
-  'Renaissance', 
-  'Industrial', 
-  'Modern', 
-  'Cyberpunk', 
-  'Sci-Fi', 
-  'Far Future'
-];
-
-export const AGE_GROUPS: AgeGroup[] = [
-  'Original',
-  'Preteen',
-  'Teenager',
-  'Young Adult',
-  'Adult',
-  'Middle-Aged',
-  'Elderly'
-];
-
-export const FOOTWEAR_OPTIONS: Footwear[] = [
-  'Original',
-  'Barefoot',
-  'Sandals',
-  'Anklets',
-  'Clogs',
-  'Sneakers',
-  'Boots',
-  'Shoes',
-  'Leather Wraps'
-];
-
-export const BACKGROUND_OPTIONS: BackgroundType[] = [
-  'Original', 
-  'Transparent', 
-  'Beach', 
-  'Forest', 
-  'Plains', 
-  'Snow', 
-  'Desert', 
-  'Sea', 
-  'Rivers', 
-  'City', 
-  'Village', 
-  'Spaceship', 
-  'Moon', 
-  'Mars', 
-  'Mountains', 
-  'Jungle', 
-  'Castle', 
-  'Library', 
-  'Laboratory'
-];

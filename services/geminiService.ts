@@ -1,5 +1,6 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { AppSettings } from "../types";
+import { PROMPT_CONFIG } from "../promptOptions";
 
 // Helper to convert Blob/File to Base64
 export const fileToGenerativePart = async (file: File): Promise<string> => {
@@ -124,75 +125,45 @@ export class GeminiService {
         // Background logic
         if (settings.extractCharacter) {
           basePrompt += " Isolate the main character. Crop the image to focus solely on them. Remove the background completely and replace it with a solid, pure white background (#FFFFFF). Ensure the character is fully visible and not cut off.";
-        } else if (settings.background === 'Transparent') {
-          basePrompt += " Remove the existing background completely and replace it with a transparent alpha channel. Ensure the output is a RGBA PNG with transparency.";
-        } else if (settings.background !== 'Original') {
-          // For scenic backgrounds
-          basePrompt += ` Replace the entire background with a high-quality, realistic depiction of a ${settings.background}. Ensure the lighting, shadows, and reflections on the character match this new ${settings.background} environment naturally.`;
+        } else {
+          // Dynamic Background
+          const bgOption = PROMPT_CONFIG.backgrounds.find(o => o.value === settings.background);
+          if (bgOption && bgOption.prompt) {
+             basePrompt += " " + bgOption.prompt;
+          }
         }
       }
 
-      // --- New Features Logic ---
+      // --- New Features Logic (Dynamic from Config) ---
 
       // Species Transformation
-      if (settings.targetSpecies && settings.targetSpecies !== 'Original') {
-        basePrompt += ` Transform the character into a ${settings.targetSpecies}. Add characteristic features of a ${settings.targetSpecies} while maintaining the original pose and identity.`;
+      const speciesOpt = PROMPT_CONFIG.species.find(o => o.value === settings.targetSpecies);
+      if (speciesOpt && speciesOpt.prompt) {
+        basePrompt += " " + speciesOpt.prompt;
       }
 
       // Tech Level Transformation
-      if (settings.techLevel && settings.techLevel !== 'Original') {
-         switch (settings.techLevel) {
-            case 'Primitive':
-               basePrompt += " Transform the setting and artifacts to a primitive, stone-age level. Use natural materials like stone, wood, and bone. Characters should wear furs or simple skins.";
-               break;
-            case 'Ancient':
-               basePrompt += " Transform the setting to an Ancient era (like Rome, Greece, or Egypt). Use classical architecture, sandals, tunics, and bronze/iron age technology.";
-               break;
-            case 'Medieval':
-               basePrompt += " Transform the setting to the Medieval period. Use castles, stone masonry, plate or leather armor, swords, and rustic clothing.";
-               break;
-            case 'Renaissance':
-               basePrompt += " Transform the setting to the Renaissance period. Focus on ornate clothing, artistic flourishes, early firearms, and classical revival architecture.";
-               break;
-            case 'Industrial':
-               basePrompt += " Transform the setting to the Early Industrial/Steampunk era. Use steam power, gears, brass, brick factories, and Victorian-style clothing.";
-               break;
-            case 'Modern':
-               basePrompt += " Transform the setting to the Modern day. Use contemporary fashion, smartphones, cars, and modern architecture.";
-               break;
-            case 'Cyberpunk':
-               basePrompt += " Transform the setting to a Cyberpunk Near Future. Use neon lights, high-tech implants, holograms, dirty high-tech aesthetic, and synthetic materials.";
-               break;
-            case 'Sci-Fi':
-               basePrompt += " Transform the setting to a clean Sci-Fi Future. Use spaceships, lasers, smooth white surfaces, advanced robotics, and tight-fitting functional suits.";
-               break;
-            case 'Far Future':
-               basePrompt += " Transform the setting to the Far Future. Use unrecognizable advanced technology, energy beings, organic-tech hybrids, and surreal landscapes.";
-               break;
-         }
+      const techOpt = PROMPT_CONFIG.techLevels.find(o => o.value === settings.techLevel);
+      if (techOpt && techOpt.prompt) {
+        basePrompt += " " + techOpt.prompt;
       }
 
       // Age Transformation
-      if (settings.targetAge && settings.targetAge !== 'Original') {
-        basePrompt += ` Modify the character's apparent age to be ${settings.targetAge}. Adjust facial features, skin texture, and body proportions to reflect a ${settings.targetAge} individual while keeping the original identity recognizable.`;
+      const ageOpt = PROMPT_CONFIG.ageGroups.find(o => o.value === settings.targetAge);
+      if (ageOpt && ageOpt.prompt) {
+         basePrompt += " " + ageOpt.prompt;
       }
 
       // Clothing Adjustment
-      if (settings.clothingAmount === 'more') {
-        basePrompt += " Add more layers of clothing. Ensure the character is well-covered and dressed warmly, adding coats, robes, or full outfits where appropriate.";
-      } else if (settings.clothingAmount === 'less') {
-        basePrompt += " Reduce the amount of clothing to be lighter, such as summer wear, swimwear or lighter fabrics, suitable for a tropical environment. Do not generate explicit pornography, but artistic skin exposure is allowed if it fits the context.";
+      const clothingOpt = PROMPT_CONFIG.clothing.find(o => o.value === settings.clothingAmount);
+      if (clothingOpt && clothingOpt.prompt) {
+        basePrompt += " " + clothingOpt.prompt;
       }
 
       // Footwear Adjustment
-      if (settings.footwear && settings.footwear !== 'Original') {
-        if (settings.footwear === 'Barefoot') {
-            basePrompt += " Ensure the character is completely barefoot. Do not draw shoes, socks, or foot coverings.";
-        } else if (settings.footwear === 'Anklets') {
-            basePrompt += " Ensure the character is barefoot but wearing decorative anklets.";
-        } else {
-            basePrompt += ` Ensure the character is wearing ${settings.footwear}.`;
-        }
+      const footwearOpt = PROMPT_CONFIG.footwear.find(o => o.value === settings.footwear);
+      if (footwearOpt && footwearOpt.prompt) {
+         basePrompt += " " + footwearOpt.prompt;
       }
 
       // Fix Errors (Conditional)
