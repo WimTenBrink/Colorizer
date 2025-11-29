@@ -31,7 +31,8 @@ export const App: React.FC = () => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [processed, setProcessed] = useState<ProcessedItem[]>([]);
-  const [isPaused, setIsPaused] = useState(false);
+  // Start in paused state to allow configuration
+  const [isPaused, setIsPaused] = useState(true);
   const [zoomedItem, setZoomedItem] = useState<ZoomState | null>(null);
   
   // Storage State
@@ -507,8 +508,8 @@ export const App: React.FC = () => {
           {/* Pause Button */}
           <button
              onClick={() => setIsPaused(!isPaused)}
-             className={`flex items-center justify-center w-10 h-10 rounded-full transition-all ${isPaused ? 'bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30' : 'bg-green-500/20 text-green-500 hover:bg-green-500/30'}`}
-             title={isPaused ? "Resume Processing" : "Pause Processing"}
+             className={`flex items-center justify-center w-10 h-10 rounded-full transition-all ${isPaused ? 'bg-green-500/20 text-green-500 hover:bg-green-500/30' : 'bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30'}`}
+             title={isPaused ? "Start Processing" : "Pause Processing"}
           >
             {isPaused ? <Play size={20} className="fill-current" /> : <Pause size={20} className="fill-current" />}
           </button>

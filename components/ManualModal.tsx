@@ -54,7 +54,7 @@ Sometimes a picture is worth a thousand words. In Describe Mode, the application
 
 ## 4. Advanced Transformations & Options
 
-The application features a comprehensive **Options Dialog** accessible via the "Options" button in the header. This interface is divided into four tabs:
+The application features a comprehensive **Options Dialog** accessible via the "Options" button in the header. This interface is divided into four tabs. At any time, you can use the **Reset Defaults** button in the footer to restore all settings to their original factory values.
 
 ### 4.1 Character Tab
 Define the identity and biology of your subject:
@@ -85,7 +85,11 @@ System-level controls:
 
 ## 5. Workflow & Error Handling
 
-### 5.1 The Queue System
+### 5.1 The Queue System & Manual Start
+By default, the application starts in a **PAUSED** state (indicated by the yellow Pause icon in the header). This allows you to drag in images and take your time configuring the **Options** (Species, World, Style) before generation begins.
+
+When you are ready, click the **Play** button in the header to start processing the queue.
+
 You can drag and drop hundreds of images at once. The application places them in a sequential queue. This prevents your browser from crashing by trying to process everything simultaneously.
 
 ### 5.2 Persistence & Storage
@@ -264,7 +268,7 @@ export const ManualModal: React.FC<ManualModalProps> = ({ isOpen, onClose }) => 
                 4. Advanced Transformations & Options
               </h2>
               <p>
-                The application features a comprehensive <strong>Options Dialog</strong> accessible via the "Options" button in the header. This interface is divided into four tabs:
+                The application features a comprehensive <strong>Options Dialog</strong> accessible via the "Options" button in the header. This interface is divided into four tabs. At any time, you can use the <strong>Reset Defaults</strong> button in the footer to restore all settings to their original factory values.
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
@@ -319,8 +323,14 @@ export const ManualModal: React.FC<ManualModalProps> = ({ isOpen, onClose }) => 
                 5. Workflow & Error Handling
               </h2>
 
-              <h3 className="text-xl text-white mt-6">5.1 The Queue System</h3>
+              <h3 className="text-xl text-white mt-6">5.1 The Queue System & Manual Start</h3>
               <p>
+                By default, the application starts in a **PAUSED** state (indicated by the yellow Pause icon in the header). This allows you to drag in images and take your time configuring the **Options** (Species, World, Style) before generation begins.
+              </p>
+              <p className="mt-2">
+                When you are ready, click the **Play** button in the header to start processing the queue.
+              </p>
+              <p className="mt-2">
                 You can drag and drop hundreds of images at once. The application places them in a sequential queue. This prevents your browser from crashing by trying to process everything simultaneously.
               </p>
 
