@@ -7,7 +7,7 @@ import { GeminiService } from './services/geminiService';
 import { loadQueue, syncQueue } from './services/storageService';
 import { LogEntry, QueueItem, ProcessedItem, AppSettings, DEFAULT_SETTINGS } from './types';
 import { PROMPT_CONFIG } from './promptOptions';
-import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Trash2, RotateCcw, Maximize2, Eraser, ChevronLeft, ChevronRight, RefreshCw, Footprints, SlidersHorizontal, ChevronDown, Mountain, PenTool, BookOpen, Scissors, Pause, Play, Wand2, Shirt, UserRoundCog, Cpu, Book, Baby, Hourglass, AlertTriangle } from 'lucide-react';
+import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Trash2, RotateCcw, Maximize2, Eraser, ChevronLeft, ChevronRight, RefreshCw, Footprints, SlidersHorizontal, ChevronDown, Mountain, PenTool, BookOpen, Scissors, Pause, Play, Wand2, Shirt, UserRoundCog, Cpu, Book, Baby, Hourglass, AlertTriangle, Users } from 'lucide-react';
 
 // Polyfill process.env for browser environments if needed
 if (typeof process === 'undefined') {
@@ -722,6 +722,20 @@ export const App: React.FC = () => {
                         >
                           {PROMPT_CONFIG.species.map(sp => (
                             <option key={sp.value} value={sp.value}>{sp.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      {/* Gender */}
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Users size={12}/> Gender</label>
+                        <select 
+                          value={settings.targetGender}
+                          onChange={(e) => setSettings(s => ({ ...s, targetGender: e.target.value }))}
+                          className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
+                        >
+                          {PROMPT_CONFIG.genders.map(g => (
+                            <option key={g.value} value={g.value}>{g.label}</option>
                           ))}
                         </select>
                       </div>

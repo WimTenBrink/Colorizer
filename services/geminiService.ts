@@ -141,6 +141,12 @@ export class GeminiService {
       if (speciesOpt && speciesOpt.prompt) {
         basePrompt += " " + speciesOpt.prompt;
       }
+      
+      // Gender Transformation
+      const genderOpt = PROMPT_CONFIG.genders.find(o => o.value === settings.targetGender);
+      if (genderOpt && genderOpt.prompt) {
+        basePrompt += " " + genderOpt.prompt;
+      }
 
       // Tech Level Transformation
       const techOpt = PROMPT_CONFIG.techLevels.find(o => o.value === settings.techLevel);

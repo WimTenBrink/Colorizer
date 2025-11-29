@@ -1,3 +1,4 @@
+
 export interface LogEntry {
   id: string;
   timestamp: string;
@@ -33,6 +34,7 @@ export interface PromptOption {
 
 export interface PromptConfig {
   species: PromptOption[];
+  genders: PromptOption[];
   techLevels: PromptOption[];
   ageGroups: PromptOption[];
   footwear: PromptOption[];
@@ -57,6 +59,7 @@ export interface AppSettings {
   // Dropdowns
   clothingAmount: string;
   targetSpecies: string;
+  targetGender: string;
   techLevel: string;
   targetAge: string;
   footwear: string;
@@ -76,6 +79,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
   clothingAmount: 'as-is',
   targetSpecies: 'Original',
+  targetGender: 'Original',
   techLevel: 'Original',
   targetAge: 'Original',
   footwear: 'Original'
