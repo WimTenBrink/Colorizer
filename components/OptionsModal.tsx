@@ -1,12 +1,12 @@
 
 import React, { useState } from 'react';
-import { AppSettings } from '../types';
+import { AppSettings, DEFAULT_SETTINGS } from '../types';
 import { PROMPT_CONFIG } from '../promptOptions';
 import { 
   X, UserRoundCog, Shirt, Map, Zap, 
   CheckCircle, Scissors, PenTool, BookOpen, 
   Mountain, Sun, Cpu, Baby, Users, Footprints, 
-  RefreshCw, Palette
+  RefreshCw, Palette, RotateCcw
 } from 'lucide-react';
 
 interface OptionsModalProps {
@@ -27,6 +27,12 @@ export const OptionsModal: React.FC<OptionsModalProps> = ({ isOpen, onClose, set
     { id: 'world', label: 'World', icon: Map },
     { id: 'tools', label: 'Tools', icon: Zap },
   ] as const;
+
+  const handleReset = () => {
+    if (window.confirm('Are you sure you want to reset all options to their default values?')) {
+      onUpdate(DEFAULT_SETTINGS);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -375,7 +381,15 @@ export const OptionsModal: React.FC<OptionsModalProps> = ({ isOpen, onClose, set
         </div>
         
         {/* Footer */}
-        <div className="px-8 py-4 bg-[#161b22] border-t border-gray-800 flex justify-end shrink-0">
+        <div className="px-8 py-4 bg-[#161b22] border-t border-gray-800 flex justify-between shrink-0">
+          <button
+            onClick={handleReset}
+            className="px-4 py-3 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+          >
+            <RotateCcw size={16} />
+            Reset Defaults
+          </button>
+
           <button 
             onClick={onClose}
             className="px-8 py-3 bg-white text-gray-900 rounded-lg text-sm font-bold hover:bg-gray-200 transition-colors shadow-lg"
