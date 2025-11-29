@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { LogEntry } from '../types';
-import { X, Copy, Trash2, ChevronDown, ChevronRight, Terminal } from 'lucide-react';
+import { X, Copy, Trash2, ChevronDown, ChevronRight, Terminal, Info, AlertTriangle, Zap, Image as ImageIcon } from 'lucide-react';
 
 interface ConsoleProps {
   isOpen: boolean;
@@ -66,17 +66,26 @@ const LogItem: React.FC<{ entry: LogEntry }> = ({ entry }) => {
 };
 
 export const Console: React.FC<ConsoleProps> = ({ isOpen, onClose, logs, onClear }) => {
-  const [filter, setFilter] = useState<'ALL' | 'REQ' | 'RES' | 'ERROR'>('ALL');
+  const [filter, setFilter] = useState<'ALL' | 'INFO' | 'ERROR' | 'GEMINI' | 'IMAGEN'>('ALL');
 
   if (!isOpen) return null;
 
   const filteredLogs = logs.filter(log => {
     if (filter === 'ALL') return true;
+    if (filter === 'INFO') return log.type === 'INFO';
     if (filter === 'ERROR') return log.type === 'ERROR';
-    if (filter === 'REQ') return log.type.includes('REQ');
-    if (filter === 'RES') return log.type.includes('RES');
+    if (filter === 'GEMINI') return log.type === 'GEMINI_REQ' || log.type === 'GEMINI_RES';
+    if (filter === 'IMAGEN') return log.type === 'IMAGEN_REQ' || log.type === 'IMAGEN_RES';
     return true;
   });
+
+  const filters = [
+    { id: 'ALL', label: 'All Logs', icon: Terminal },
+    { id: 'INFO', label: 'Info', icon: Info },
+    { id: 'ERROR', label: 'Errors', icon: AlertTriangle },
+    { id: 'GEMINI', label: 'Gemini IO', icon: Zap },
+    { id: 'IMAGEN', label: 'Imagen IO', icon: ImageIcon },
+  ] as const;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 md:p-8">
@@ -105,20 +114,24 @@ export const Console: React.FC<ConsoleProps> = ({ isOpen, onClose, logs, onClear
         </div>
 
         {/* Filters */}
-        <div className="flex gap-1 px-6 py-3 bg-[#161b22] border-b border-gray-800">
-          {['ALL', 'REQ', 'RES', 'ERROR'].map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f as any)}
-              className={`px-4 py-1.5 text-xs font-medium rounded-full transition-all ${
-                filter === f 
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 
-                  : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
-              }`}
-            >
-              {f === 'ALL' ? 'All Logs' : f === 'REQ' ? 'Requests' : f === 'RES' ? 'Responses' : 'Errors'}
-            </button>
-          ))}
+        <div className="flex gap-2 px-6 py-3 bg-[#161b22] border-b border-gray-800 overflow-x-auto">
+          {filters.map((f) => {
+            const Icon = f.icon;
+            return (
+              <button
+                key={f.id}
+                onClick={() => setFilter(f.id as any)}
+                className={`flex items-center gap-2 px-4 py-1.5 text-xs font-medium rounded-full transition-all whitespace-nowrap ${
+                  filter === f.id 
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 
+                    : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+                }`}
+              >
+                <Icon size={12} />
+                {f.label}
+              </button>
+            )
+          })}
         </div>
 
         {/* Content */}

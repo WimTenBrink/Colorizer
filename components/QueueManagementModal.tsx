@@ -44,10 +44,10 @@ export const QueueManagementModal: React.FC<QueueManagementModalProps> = ({
   };
 
   const handleDelete = () => {
-    if (window.confirm(`Delete ${selectedIds.size} items?`)) {
-      onDelete(Array.from(selectedIds));
-      setSelectedIds(new Set());
-    }
+    // Direct delete without confirm dialog for better UX inside management modal
+    // User already selected items explicitly.
+    onDelete(Array.from(selectedIds));
+    setSelectedIds(new Set());
   };
 
   const handleRetry = () => {

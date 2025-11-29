@@ -93,7 +93,15 @@ export const App: React.FC = () => {
     const initQueue = async () => {
       const savedQueue = await loadQueue();
       if (savedQueue.length > 0) {
-        setQueue(savedQueue);
+        // Fix: Reset 'processing' items to 'pending' on load
+        // Items stuck in 'processing' state when the app closes will block the queue forever otherwise.
+        const sanitizedQueue = savedQueue.map(q => 
+          q.status === 'processing' ? { ...q, status: 'pending' as const } : q
+        );
+        setQueue(sanitizedQueue);
+        
+        // Optional: Log that queue was restored
+        addLog('INFO', `Restored ${savedQueue.length} items from storage`, {});
       }
       setIsStorageInitialized(true);
     };
@@ -470,11 +478,13 @@ export const App: React.FC = () => {
   };
   
   const handleBulkDelete = (ids: string[]) => {
+    if (!ids || ids.length === 0) return;
     setQueue(prev => prev.filter(item => !ids.includes(item.id)));
     addLog('INFO', `Bulk deleted ${ids.length} items`, {});
   };
 
   const handleBulkRetry = (ids: string[]) => {
+    if (!ids || ids.length === 0) return;
     setQueue(prev => prev.map(item => 
       ids.includes(item.id) 
         ? { ...item, status: 'pending', errorMessage: undefined, retryCount: 0 } 
