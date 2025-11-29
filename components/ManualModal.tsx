@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { X, Book, Github, Globe, Cpu, Layers, Palette, Wand2, Terminal, AlertTriangle, ShieldCheck, Download, Save, HardDrive } from 'lucide-react';
 
@@ -6,7 +7,7 @@ interface ManualModalProps {
   onClose: () => void;
 }
 
-const MANUAL_MARKDOWN = `# Katje Colorizer Documentation v1.2
+const MANUAL_MARKDOWN = `# Katje Colorizer Documentation v1.3
 
 ## 1. Introduction to Katje Colorizer
 
@@ -51,24 +52,36 @@ Similar to background removal, but places the subject on a pure white background
 ### 3.5 Describe Mode
 Sometimes a picture is worth a thousand words. In Describe Mode, the application generates a Markdown file alongside the image. This file contains a creative story or detailed description of the scene, titled and formatted automatically.
 
-## 4. Advanced Transformations
+## 4. Advanced Transformations & Options
 
-### 4.1 Species Mutation
-Transform a human subject into various fantasy or sci-fi races (Vulcan, Elf, Dwarf, Angel, etc.). The AI preserves the pose and gender but alters ear shape, skin tone, and facial structure.
+The application features a comprehensive **Options Dialog** accessible via the "Options" button in the header. This interface is divided into four tabs:
 
-### 4.2 Temporal Shift (Tech Level)
-Transport your subject through time. Changing the Tech Level alters the clothing, background artifacts, and general aesthetic (Primitive, Medieval, Modern, Cyberpunk, etc.).
+### 4.1 Character Tab
+Define the identity and biology of your subject:
+- **Species:** Transform humans into fantasy races (Elf, Orc, Tiefling) or sci-fi species (Vulcan, Borg).
+- **Gender:** Adjust the physical presentation (Male, Female, Androgynous).
+- **Age:** Modify the apparent age from Child to Elderly.
+- **Skin Tone:** Specify realistic ethnicities or fantasy colors (Blue, Green, Metallic).
+- **Hair Color:** Choose from natural shades or vibrant dyes.
 
-### 4.3 Age Modification
-Alter the apparent age of the subject. The AI will adjust facial features, skin texture, and body proportions to match the selected life stage.
+### 4.2 Attire Tab
+Control clothing and style:
+- **Clothing Amount:** Increase layers for cold weather or modesty, or decrease for summer/swimwear. Includes a "Nude (Implied)" option for artistic anatomy studies.
+- **Footwear:** Select specific shoes (Boots, Sandals, Sneakers) or force a barefoot look.
 
-### 4.4 Footwear & Clothing
-Control the attire of your subject with granular precision:
-- **Clothing:** Increase layers (coats/robes) or decrease them (swimwear/summer).
-- **Footwear:** Select specific footwear styles including Sandals, Boots, Sneakers, Clogs, or Leather Wraps. You can also enforce a "Barefoot" look.
+### 4.3 World Tab
+Set the stage and context:
+- **Background:** Choose from over 30 environments including Nature, Cities, and Historical settings.
+- **Time of Day:** Control the lighting atmosphere (Sunrise, Noon, Golden Hour, Midnight).
+- **Tech Level:** Shift the entire genre of the image (Primitive, Medieval, Modern, Cyberpunk).
 
-### 4.5 Anatomy Fixer
-Generative AI sometimes struggles with extremities. The "Fix Anatomy" toggle injects specific negative prompts and guidance instructions to prioritize the correct rendering of hands, fingers, and limb symmetry.
+### 4.4 Tools Tab
+System-level controls:
+- **Resolution:** Set output quality (1K to 8K).
+- **Fix Anatomy:** Enable negative prompting to correct AI errors with hands and limbs.
+- **Extract Character:** Isolate subject on white.
+- **Line Art Mode:** Switch to B&W sketch generation.
+- **Describe Mode:** Enable text story generation.
 
 ## 5. Workflow & Error Handling
 
@@ -80,10 +93,11 @@ The application utilizes your browser's **IndexedDB** to automatically save your
 
 ### 5.3 Throttling & Limits
 - **API Throttling:** To comply with standard API quotas, the application limits processing to **60 images per minute**.
-- **Download Queue:** Modern browsers block websites that try to download too many files simultaneously. Katje Colorizer spaces out file saves by 1.5 seconds to ensure every file is saved correctly.
+- **Concurrency:** The system processes up to **2 images simultaneously** to maximize throughput while respecting limits.
+- **Download Queue:** Modern browsers block websites that try to download too many files simultaneously. Katje Colorizer spaces out file saves by 1.5 seconds.
 
 ### 5.4 Manual Error Handling
-If an image fails to process (e.g., due to a content safety block or server error), it is moved to the "Failed Items" list. The system does **not** auto-retry. You must review the error and click "Retry" manually. This ensures a bad batch doesn't result in an infinite loop of API errors.
+If an image fails to process (e.g., due to a content safety block or server error), it is moved to the "Failed Items" list. The system does **not** auto-retry. You must review the error and click "Retry" manually.
 
 ## 6. Legal & Credits
 
@@ -121,7 +135,7 @@ export const ManualModal: React.FC<ManualModalProps> = ({ isOpen, onClose }) => 
             </div>
             <div>
               <h2 className="text-2xl font-bold text-white tracking-tight">User Manual</h2>
-              <p className="text-sm text-gray-400">Katje Colorizer Documentation v1.2</p>
+              <p className="text-sm text-gray-400">Katje Colorizer Documentation v1.3</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -247,70 +261,55 @@ export const ManualModal: React.FC<ManualModalProps> = ({ isOpen, onClose }) => 
             <div className="mb-12 border-b border-gray-800 pb-8">
               <h2 className="text-3xl mb-6 text-white flex items-center gap-3">
                 <Wand2 className="text-yellow-500" />
-                4. Advanced Transformations
+                4. Advanced Transformations & Options
               </h2>
               <p>
-                Katje Colorizer allows you to fundamentally alter the reality of the image through semantic transformations.
+                The application features a comprehensive <strong>Options Dialog</strong> accessible via the "Options" button in the header. This interface is divided into four tabs:
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
                 <div>
-                  <h4 className="text-lg font-bold text-white">4.1 Species Mutation</h4>
-                  <p>
-                    Transform a human subject into various fantasy or sci-fi races. Options include:
-                  </p>
-                  <ul className="text-sm grid grid-cols-2 gap-2">
-                    <li>• Vulcan / Klingon</li>
-                    <li>• Elf / Half-Elf</li>
-                    <li>• Dwarf / Gnome</li>
-                    <li>• Angel / Demon</li>
-                    <li>• Mermaid</li>
+                  <h4 className="text-lg font-bold text-white">4.1 Character Tab</h4>
+                  <p>Define the identity and biology of your subject:</p>
+                  <ul className="text-sm space-y-1">
+                    <li>• <strong>Species:</strong> Transform humans into fantasy/sci-fi races (Elf, Vulcan, Borg).</li>
+                    <li>• <strong>Gender:</strong> Adjust physical presentation (Male, Female, Androgynous).</li>
+                    <li>• <strong>Age:</strong> Modify apparent age from Child to Elderly.</li>
+                    <li>• <strong>Skin Tone:</strong> Realistic ethnicities or fantasy colors.</li>
+                    <li>• <strong>Hair Color:</strong> Natural shades or vibrant dyes.</li>
                   </ul>
-                  <p className="text-xs text-gray-500 mt-2">The AI preserves the pose and gender but alters ear shape, skin tone, and facial structure.</p>
                 </div>
                 <div>
-                  <h4 className="text-lg font-bold text-white">4.2 Temporal Shift (Tech Level)</h4>
-                  <p>
-                    Transport your subject through time. Changing the Tech Level alters the clothing, background artifacts, and general aesthetic:
-                  </p>
-                  <ul className="text-sm">
-                    <li>• <strong>Primitive/Ancient:</strong> Furs, stone tools, bronze age tunics.</li>
-                    <li>• <strong>Medieval/Renaissance:</strong> Plate armor, castles, ornate silks.</li>
-                    <li>• <strong>Modern/Industrial:</strong> Suits, factories, smartphones.</li>
-                    <li>• <strong>Cyberpunk/Far Future:</strong> Neons, implants, energy beings.</li>
+                  <h4 className="text-lg font-bold text-white">4.2 Attire Tab</h4>
+                  <p>Control clothing and style:</p>
+                  <ul className="text-sm space-y-1">
+                    <li>• <strong>Clothing Amount:</strong> Layers for weather/modesty, or "Nude (Implied)" for artistic anatomy.</li>
+                    <li>• <strong>Footwear:</strong> Specific shoes (Boots, Sneakers) or Barefoot.</li>
                   </ul>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
                 <div>
-                  <h4 className="text-lg font-bold text-white">4.3 Age Modification</h4>
-                  <p>
-                    Alter the apparent age of the subject. The AI will adjust facial features, skin texture, and body proportions to match the selected life stage:
-                  </p>
-                  <ul className="text-sm">
-                    <li>• <strong>Child / Preteen</strong></li>
-                    <li>• <strong>Teenager</strong></li>
-                    <li>• <strong>Young Adult / Adult</strong></li>
-                    <li>• <strong>Middle-Aged / Elderly</strong></li>
+                  <h4 className="text-lg font-bold text-white">4.3 World Tab</h4>
+                  <p>Set the stage and context:</p>
+                  <ul className="text-sm space-y-1">
+                    <li>• <strong>Background:</strong> Over 30 environments (Nature, Cities, History).</li>
+                    <li>• <strong>Time of Day:</strong> Lighting atmosphere (Sunrise, Noon, Midnight).</li>
+                    <li>• <strong>Tech Level:</strong> Genre shift (Primitive, Medieval, Cyberpunk).</li>
                   </ul>
                 </div>
                 <div>
-                  <h4 className="text-lg font-bold text-white">4.4 Footwear & Clothing</h4>
-                  <p>
-                     Control the attire of your subject with granular precision:
-                  </p>
-                  <ul className="text-sm mt-2 space-y-1">
-                    <li><strong>Clothing:</strong> Increase layers (coats/robes) or decrease them (swimwear/summer).</li>
-                    <li><strong>Footwear:</strong> Select specific footwear styles including Sandals, Boots, Sneakers, Clogs, or Leather Wraps. You can also enforce a "Barefoot" look.</li>
+                  <h4 className="text-lg font-bold text-white">4.4 Tools Tab</h4>
+                  <p>System-level controls:</p>
+                  <ul className="text-sm space-y-1">
+                    <li>• <strong>Resolution:</strong> 1K to 8K output.</li>
+                    <li>• <strong>Fix Anatomy:</strong> Correct AI errors with limbs.</li>
+                    <li>• <strong>Extract Character:</strong> Isolate on white.</li>
+                    <li>• <strong>Line Art Mode:</strong> B&W sketch generation.</li>
                   </ul>
                 </div>
               </div>
-
-              <h3 className="text-xl text-white mt-8">4.5 Anatomy Fixer</h3>
-              <p>
-                Generative AI sometimes struggles with extremities. The "Fix Anatomy" toggle injects specific negative prompts and guidance instructions to prioritize the correct rendering of hands, fingers, and limb symmetry.
-              </p>
             </div>
 
             {/* Chapter 5: Workflow Management */}
@@ -333,6 +332,9 @@ export const ManualModal: React.FC<ManualModalProps> = ({ isOpen, onClose }) => 
               <h3 className="text-xl text-white mt-6">5.3 Throttling & Limits</h3>
               <p>
                 <strong>API Throttling:</strong> To comply with standard API quotas, the application limits processing to **60 images per minute**.
+              </p>
+              <p className="mt-2">
+                <strong>Concurrency:</strong> The system processes up to **2 images simultaneously** to maximize throughput while respecting limits.
               </p>
               <p className="mt-2">
                 <strong>Download Throttling:</strong> Modern browsers consider a website trying to download many files at once as a security threat (spam). To bypass this, Katje Colorizer implements a "Download Queue" that spaces out file saves by 1.5 seconds.

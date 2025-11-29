@@ -3,11 +3,12 @@ import { Console } from './components/Console';
 import { SettingsModal } from './components/SettingsModal';
 import { ManualModal } from './components/ManualModal';
 import { QueueManagementModal } from './components/QueueManagementModal';
+import { OptionsModal } from './components/OptionsModal';
 import { GeminiService } from './services/geminiService';
 import { loadQueue, syncQueue } from './services/storageService';
 import { LogEntry, QueueItem, ProcessedItem, AppSettings, DEFAULT_SETTINGS } from './types';
 import { PROMPT_CONFIG } from './promptOptions';
-import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Trash2, RotateCcw, Maximize2, Eraser, ChevronLeft, ChevronRight, RefreshCw, Footprints, SlidersHorizontal, ChevronDown, Mountain, PenTool, BookOpen, Scissors, Pause, Play, Wand2, Shirt, UserRoundCog, Cpu, Book, Baby, Hourglass, AlertTriangle, Users } from 'lucide-react';
+import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Trash2, RotateCcw, Maximize2, Eraser, ChevronLeft, ChevronRight, RefreshCw, SlidersHorizontal, Book, AlertTriangle, Play, Pause, ChevronDown } from 'lucide-react';
 
 // Polyfill process.env for browser environments if needed
 if (typeof process === 'undefined') {
@@ -30,7 +31,6 @@ export const App: React.FC = () => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [processed, setProcessed] = useState<ProcessedItem[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [zoomedItem, setZoomedItem] = useState<ZoomState | null>(null);
   
@@ -48,7 +48,7 @@ export const App: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings>(() => {
     try {
       const saved = localStorage.getItem('katje-settings');
-      // Merge saved settings with default to handle removed keys (maxRetries, removeBackground)
+      // Merge saved settings with default to handle removed keys or new keys
       return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
     } catch (e) {
       return DEFAULT_SETTINGS;
@@ -59,7 +59,7 @@ export const App: React.FC = () => {
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isManualOpen, setIsManualOpen] = useState(false);
-  const [isOptionsOpen, setIsOptionsOpen] = useState(false);
+  const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   
   // Management Modal State
@@ -93,8 +93,6 @@ export const App: React.FC = () => {
       const savedQueue = await loadQueue();
       if (savedQueue.length > 0) {
         setQueue(savedQueue);
-        // We don't want to spam logs on reload, but maybe one info log
-        // addLog('INFO', `Restored ${savedQueue.length} items from storage`, {});
       }
       setIsStorageInitialized(true);
     };
@@ -132,28 +130,11 @@ export const App: React.FC = () => {
   // Refs
   const geminiService = useRef(new GeminiService());
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const optionsRef = useRef<HTMLDivElement>(null);
   const lastRequestTime = useRef<number>(0);
   
   // Download Queue Refs
   const downloadQueueRef = useRef<{url: string, filename: string}[]>([]);
   const isDownloadingRef = useRef(false);
-
-  // Click outside listener for options menu
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (optionsRef.current && !optionsRef.current.contains(event.target as Node)) {
-        setIsOptionsOpen(false);
-      }
-    };
-    if (isOptionsOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOptionsOpen]);
-
 
   // Helper: Logging
   const addLog = useCallback((type: LogEntry['type'], title: string, details: any = {}) => {
@@ -225,28 +206,30 @@ export const App: React.FC = () => {
 
   // Helper: Process Queue
   const processNext = useCallback(async () => {
-    if (isProcessing || isPaused || queue.length === 0) return;
+    // CONCURRENCY CONTROL: Allow up to 2 simultaneous jobs
+    const activeJobs = queue.filter(q => q.status === 'processing').length;
+    if (activeJobs >= 2 || isPaused || queue.length === 0) return;
 
     // Find first pending item
     const nextItemIndex = queue.findIndex(item => item.status === 'pending');
     if (nextItemIndex === -1) return;
 
     const item = queue[nextItemIndex];
-    setIsProcessing(true); // Lock processing immediately
+    
+    // Update status to processing immediately to reserve the slot
+    // This prevents subsequent triggers from picking the same item
+    setQueue(prev => prev.map((q, i) => i === nextItemIndex ? { ...q, status: 'processing', errorMessage: undefined } : q));
 
-    // Throttling: Ensure max 60 requests per minute (1 per second)
-    // We wait here to ensure spacing between START times of requests
+    // Throttling: Ensure spacing between requests
+    // Even with 2 jobs, we want to avoid bursting 2 requests at the exact same millisecond
     const now = Date.now();
     const timeSinceLast = now - lastRequestTime.current;
-    const MIN_DELAY = 1000;
+    const MIN_DELAY = 1000; // 1 second spacing between starts
 
     if (timeSinceLast < MIN_DELAY) {
       await new Promise(resolve => setTimeout(resolve, MIN_DELAY - timeSinceLast));
     }
     lastRequestTime.current = Date.now();
-
-    // Update status to processing (UI update)
-    setQueue(prev => prev.map((q, i) => i === nextItemIndex ? { ...q, status: 'processing', errorMessage: undefined } : q));
 
     try {
       addLog('INFO', `Starting job: ${item.originalName}`, { itemId: item.id, settings });
@@ -340,17 +323,21 @@ export const App: React.FC = () => {
         });
       });
 
-    } finally {
-      setIsProcessing(false);
     }
-  }, [queue, isProcessing, isPaused, settings, addLog, queueDownload]);
+    // We don't have a specific "finally" state update because removal/error status 
+    // happens above, which triggers the useEffect watcher to pick up the next item.
+  }, [queue, isPaused, settings, addLog, queueDownload]);
 
   // Queue Watcher
   useEffect(() => {
-    if (!isProcessing && !isPaused && queue.some(q => q.status === 'pending')) {
+    // Check concurrent jobs count
+    const activeJobs = queue.filter(q => q.status === 'processing').length;
+    
+    // If we have slots available (< 2) and pending items, process next
+    if (activeJobs < 2 && !isPaused && queue.some(q => q.status === 'pending')) {
       processNext();
     }
-  }, [queue, isProcessing, isPaused, processNext]);
+  }, [queue, isPaused, processNext]);
 
   // Zoom Navigation Logic
   const handleZoomNext = useCallback(() => {
@@ -579,229 +566,13 @@ export const App: React.FC = () => {
 
         <div className="flex items-center gap-3">
            
-           {/* Options Dropdown */}
-           <div className="relative" ref={optionsRef}>
-              <button
-                onClick={() => setIsOptionsOpen(!isOptionsOpen)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all border ${
-                  isOptionsOpen 
-                    ? 'bg-gray-700 text-white border-gray-600' 
-                    : 'bg-gray-800 text-gray-400 border-transparent hover:bg-gray-700'
-                }`}
-              >
-                <SlidersHorizontal size={16} />
-                <span className="hidden sm:inline">Options</span>
-                <ChevronDown size={14} className={`transition-transform ${isOptionsOpen ? 'rotate-180' : ''}`} />
-              </button>
-
-              {isOptionsOpen && (
-                <div className="absolute top-full right-0 mt-2 w-80 bg-[#1e232b] border border-gray-700 rounded-xl shadow-2xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-200 max-h-[85vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600">
-                  <div className="space-y-4">
-                    
-                    {/* Processing Settings */}
-                    <div>
-                      <h4 className="text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-2"><RefreshCw size={12}/> Processing</h4>
-                      
-                      <div className="grid grid-cols-4 gap-1">
-                         {/* Resolution (Pro Models) */}
-                        {['1K', '2K', '4K', '8K'].map((res) => (
-                          <button
-                            key={res}
-                            onClick={() => setSettings(s => ({ ...s, resolution: res as any }))}
-                            className={`px-2 py-1.5 text-xs font-medium rounded transition-all ${
-                              settings.resolution === res
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                            }`}
-                          >
-                            {res}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    <div className="h-px bg-gray-700" />
-
-                    {/* Enhancements */}
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-2"><Wand2 size={12}/> Enhancements</h4>
-                       {/* Fix Errors */}
-                      <button
-                        onClick={() => setSettings(s => ({ ...s, fixErrors: !s.fixErrors }))}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                          settings.fixErrors
-                            ? 'bg-emerald-900/30 text-emerald-300 border border-emerald-700/50' 
-                            : 'bg-gray-800/50 text-gray-400 hover:bg-gray-800 border border-transparent'
-                        }`}
-                      >
-                         <div className="flex items-center gap-2">
-                          <CheckCircle size={14} />
-                          <span>Fix Anatomy/Errors</span>
-                        </div>
-                        <div className={`w-3 h-3 rounded-full ${settings.fixErrors ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-gray-600'}`} />
-                      </button>
-
-                      {/* Extract Character */}
-                      <button
-                        onClick={() => setSettings(s => ({ ...s, extractCharacter: !s.extractCharacter }))}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                          settings.extractCharacter
-                            ? 'bg-indigo-900/30 text-indigo-300 border border-indigo-700/50' 
-                            : 'bg-gray-800/50 text-gray-400 hover:bg-gray-800 border border-transparent'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Scissors size={14} />
-                          <span>Extract Character</span>
-                        </div>
-                        <div className={`w-3 h-3 rounded-full ${settings.extractCharacter ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]' : 'bg-gray-600'}`} />
-                      </button>
-
-                      {/* Revert to Line Art */}
-                      <button
-                        onClick={() => setSettings(s => ({ ...s, revertToLineArt: !s.revertToLineArt }))}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                          settings.revertToLineArt 
-                            ? 'bg-gray-100 text-gray-900 border border-white/50' 
-                            : 'bg-gray-800/50 text-gray-400 hover:bg-gray-800 border border-transparent'
-                        }`}
-                      >
-                         <div className="flex items-center gap-2">
-                          <PenTool size={14} />
-                          <span>Line Art Mode</span>
-                        </div>
-                        <div className={`w-3 h-3 rounded-full ${settings.revertToLineArt ? 'bg-white shadow-[0_0_8px_rgba(255,255,255,0.5)]' : 'bg-gray-600'}`} />
-                      </button>
-
-                      {/* Describe Mode */}
-                       <button
-                        onClick={() => setSettings(s => ({ ...s, describeMode: !s.describeMode }))}
-                        disabled={settings.revertToLineArt}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                          settings.describeMode && !settings.revertToLineArt
-                            ? 'bg-yellow-900/30 text-yellow-300 border border-yellow-700/50' 
-                            : 'bg-gray-800/50 text-gray-400 hover:bg-gray-800 border border-transparent'
-                        } ${settings.revertToLineArt ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                         <div className="flex items-center gap-2">
-                          <BookOpen size={14} />
-                          <span>Describe</span>
-                        </div>
-                        <div className={`w-3 h-3 rounded-full ${settings.describeMode && !settings.revertToLineArt ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.5)]' : 'bg-gray-600'}`} />
-                      </button>
-                    </div>
-
-                    <div className="h-px bg-gray-700" />
-
-                     {/* Transformations */}
-                     <div className="space-y-3">
-                      <h4 className="text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-2"><UserRoundCog size={12}/> Transformations</h4>
-                      
-                      {/* Background (New) */}
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Mountain size={12}/> Background</label>
-                        <select 
-                          value={settings.background}
-                          onChange={(e) => setSettings(s => ({ ...s, background: e.target.value }))}
-                          disabled={settings.revertToLineArt || settings.extractCharacter}
-                          className={`w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none ${settings.revertToLineArt || settings.extractCharacter ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                          {PROMPT_CONFIG.backgrounds.map(bg => (
-                            <option key={bg.value} value={bg.value}>{bg.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Species */}
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><UserRoundCog size={12}/> Species</label>
-                        <select 
-                          value={settings.targetSpecies}
-                          onChange={(e) => setSettings(s => ({ ...s, targetSpecies: e.target.value }))}
-                          className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
-                        >
-                          {PROMPT_CONFIG.species.map(sp => (
-                            <option key={sp.value} value={sp.value}>{sp.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      
-                      {/* Gender */}
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Users size={12}/> Gender</label>
-                        <select 
-                          value={settings.targetGender}
-                          onChange={(e) => setSettings(s => ({ ...s, targetGender: e.target.value }))}
-                          className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
-                        >
-                          {PROMPT_CONFIG.genders.map(g => (
-                            <option key={g.value} value={g.value}>{g.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Age Group */}
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Baby size={12}/> Age Group</label>
-                        <select 
-                          value={settings.targetAge}
-                          onChange={(e) => setSettings(s => ({ ...s, targetAge: e.target.value }))}
-                          className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
-                        >
-                          {PROMPT_CONFIG.ageGroups.map(age => (
-                            <option key={age.value} value={age.value}>{age.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Tech Level */}
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Cpu size={12}/> Tech Level</label>
-                        <select 
-                          value={settings.techLevel}
-                          onChange={(e) => setSettings(s => ({ ...s, techLevel: e.target.value }))}
-                          className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
-                        >
-                          {PROMPT_CONFIG.techLevels.map(tl => (
-                            <option key={tl.value} value={tl.value}>{tl.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Clothing Amount */}
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Shirt size={12}/> Clothing</label>
-                        <select 
-                          value={settings.clothingAmount}
-                          onChange={(e) => setSettings(s => ({ ...s, clothingAmount: e.target.value }))}
-                          className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
-                        >
-                          {PROMPT_CONFIG.clothing.map(cl => (
-                             <option key={cl.value} value={cl.value}>{cl.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Footwear */}
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-gray-300 flex items-center gap-2"><Footprints size={12}/> Footwear</label>
-                        <select 
-                          value={settings.footwear}
-                          onChange={(e) => setSettings(s => ({ ...s, footwear: e.target.value }))}
-                          className="w-full bg-black/30 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-blue-500 outline-none"
-                        >
-                          {PROMPT_CONFIG.footwear.map(fw => (
-                            <option key={fw.value} value={fw.value}>{fw.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                     </div>
-
-                  </div>
-                </div>
-              )}
-           </div>
+           <button
+             onClick={() => setIsOptionsModalOpen(true)}
+             className="flex items-center gap-2 px-3 py-2 bg-gray-800 text-gray-400 border border-transparent hover:bg-gray-700 hover:text-white rounded-lg text-sm font-medium transition-all"
+           >
+             <SlidersHorizontal size={16} />
+             <span className="hidden sm:inline">Options</span>
+           </button>
 
            {stats.errors > 0 && (
              <button
@@ -1086,6 +857,13 @@ export const App: React.FC = () => {
         onUpdate={setSettings}
         apiKey={apiKey}
         onApiKeyChange={setApiKey}
+      />
+      
+      <OptionsModal
+        isOpen={isOptionsModalOpen}
+        onClose={() => setIsOptionsModalOpen(false)}
+        settings={settings}
+        onUpdate={setSettings}
       />
       
       <QueueManagementModal 

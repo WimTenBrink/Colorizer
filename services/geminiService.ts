@@ -147,6 +147,24 @@ export class GeminiService {
       if (genderOpt && genderOpt.prompt) {
         basePrompt += " " + genderOpt.prompt;
       }
+      
+      // Hair Color
+      const hairOpt = PROMPT_CONFIG.hairColors.find(o => o.value === settings.targetHair);
+      if (hairOpt && hairOpt.prompt) {
+        basePrompt += " " + hairOpt.prompt;
+      }
+      
+      // Skin Tone
+      const skinOpt = PROMPT_CONFIG.skinTones.find(o => o.value === settings.targetSkin);
+      if (skinOpt && skinOpt.prompt) {
+        basePrompt += " " + skinOpt.prompt;
+      }
+
+      // Time of Day
+      const timeOpt = PROMPT_CONFIG.timeOfDay.find(o => o.value === settings.timeOfDay);
+      if (timeOpt && timeOpt.prompt) {
+        basePrompt += " " + timeOpt.prompt;
+      }
 
       // Tech Level Transformation
       const techOpt = PROMPT_CONFIG.techLevels.find(o => o.value === settings.techLevel);

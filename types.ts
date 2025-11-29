@@ -1,4 +1,5 @@
 
+
 export interface LogEntry {
   id: string;
   timestamp: string;
@@ -35,8 +36,11 @@ export interface PromptOption {
 export interface PromptConfig {
   species: PromptOption[];
   genders: PromptOption[];
+  hairColors: PromptOption[];
+  skinTones: PromptOption[];
   techLevels: PromptOption[];
   ageGroups: PromptOption[];
+  timeOfDay: PromptOption[];
   footwear: PromptOption[];
   backgrounds: PromptOption[];
   clothing: PromptOption[];
@@ -60,8 +64,11 @@ export interface AppSettings {
   clothingAmount: string;
   targetSpecies: string;
   targetGender: string;
+  targetHair: string;
+  targetSkin: string;
   techLevel: string;
   targetAge: string;
+  timeOfDay: string;
   footwear: string;
 }
 
@@ -80,8 +87,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   clothingAmount: 'as-is',
   targetSpecies: 'Original',
   targetGender: 'Original',
+  targetHair: 'Original',
+  targetSkin: 'Original',
   techLevel: 'Original',
   targetAge: 'Original',
+  timeOfDay: 'Original',
   footwear: 'Original'
 };
 
