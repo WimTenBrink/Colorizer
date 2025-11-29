@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Console } from './components/Console';
 import { SettingsModal } from './components/SettingsModal';
 import { ManualModal } from './components/ManualModal';
+import { QueueManagementModal } from './components/QueueManagementModal';
 import { GeminiService } from './services/geminiService';
 import { loadQueue, syncQueue } from './services/storageService';
 import { LogEntry, QueueItem, ProcessedItem, AppSettings, DEFAULT_SETTINGS, SPECIES_LIST, Species, TECH_LEVELS, TechLevel, AGE_GROUPS, AgeGroup, FOOTWEAR_OPTIONS, Footwear, BACKGROUND_OPTIONS, BackgroundType } from './types';
@@ -58,6 +59,9 @@ const App: React.FC = () => {
   const [isManualOpen, setIsManualOpen] = useState(false);
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  
+  // Management Modal State
+  const [managementModal, setManagementModal] = useState<{isOpen: boolean, type: 'error' | 'queue'}>({ isOpen: false, type: 'error' });
 
   // Stats
   const stats = {
@@ -474,6 +478,20 @@ const App: React.FC = () => {
       addLog('INFO', 'Queue cleared by user', {});
     }
   };
+  
+  const handleBulkDelete = (ids: string[]) => {
+    setQueue(prev => prev.filter(item => !ids.includes(item.id)));
+    addLog('INFO', `Bulk deleted ${ids.length} items`, {});
+  };
+
+  const handleBulkRetry = (ids: string[]) => {
+    setQueue(prev => prev.map(item => 
+      ids.includes(item.id) 
+        ? { ...item, status: 'pending', errorMessage: undefined, retryCount: 0 } 
+        : item
+    ));
+    addLog('INFO', `Bulk retrying ${ids.length} items`, {});
+  };
 
   // Filter queues for display
   const errorQueue = queue.filter(q => q.status === 'error');
@@ -832,10 +850,16 @@ const App: React.FC = () => {
         
         {/* Left Sidebar - Failed Items */}
         <div className="hidden md:flex w-[200px] lg:w-80 bg-[#0d1117] border-r border-gray-800 flex-col shadow-xl z-10">
-           <div className="p-4 border-b border-gray-800">
-             <h2 className="text-sm font-bold text-red-400 uppercase tracking-wider flex items-center gap-2">
-               <AlertCircle size={16} />
-               Failed Items ({errorQueue.length})
+           <div 
+             className="p-4 border-b border-gray-800 cursor-pointer hover:bg-gray-800/50 transition-colors group"
+             onClick={() => {
+                setIsPaused(true);
+                setManagementModal({ isOpen: true, type: 'error' });
+             }}
+           >
+             <h2 className="text-sm font-bold text-red-400 uppercase tracking-wider flex items-center justify-between gap-2 group-hover:text-red-300">
+               <span className="flex items-center gap-2"><AlertCircle size={16} /> Failed Items ({errorQueue.length})</span>
+               <span className="text-[10px] bg-red-950/50 px-2 py-0.5 rounded border border-red-900/50 group-hover:border-red-500/50">MANAGE</span>
              </h2>
            </div>
            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#0d1117]">
@@ -938,21 +962,32 @@ const App: React.FC = () => {
           className="w-80 bg-[#161b22] border-l border-gray-800 flex flex-col shadow-2xl z-10"
         >
           <div className="p-6 border-b border-gray-800">
-            <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                Upload Queue
-                {activeQueue.length > 0 && (
-                  <button 
-                    onClick={handleClearQueue}
-                    className="p-1 hover:bg-gray-800 rounded text-gray-500 hover:text-red-400 transition-colors"
-                    title="Clear Queue"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </span>
-              {isPaused && <span className="text-yellow-500 text-xs bg-yellow-900/20 px-2 py-0.5 rounded border border-yellow-500/30">PAUSED</span>}
-            </h2>
+            <div 
+                className="flex items-center justify-between mb-4 cursor-pointer hover:text-white transition-colors group"
+                onClick={(e) => {
+                    // Prevent triggering if clicking the trash icon (clear all)
+                    if ((e.target as HTMLElement).closest('button')) return; 
+                    setIsPaused(true);
+                    setManagementModal({ isOpen: true, type: 'queue' });
+                 }}
+            >
+                <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2 group-hover:text-gray-300">
+                    Upload Queue
+                    {isPaused && <span className="text-yellow-500 text-[10px] bg-yellow-900/20 px-1.5 py-0.5 rounded border border-yellow-500/30">PAUSED</span>}
+                </h2>
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] bg-gray-800 px-2 py-0.5 rounded border border-gray-700 text-gray-400 group-hover:text-white group-hover:border-gray-500">MANAGE</span>
+                    {activeQueue.length > 0 && (
+                    <button 
+                        onClick={handleClearQueue}
+                        className="p-1 hover:bg-gray-800 rounded text-gray-500 hover:text-red-400 transition-colors"
+                        title="Clear Queue"
+                    >
+                        <Trash2 size={14} />
+                    </button>
+                    )}
+                </div>
+            </div>
             
             <label className="flex flex-col items-center justify-center w-10 h-32 border-2 border-dashed border-gray-700 rounded-xl hover:border-gray-500 hover:bg-gray-800/50 transition-all cursor-pointer group">
               <input 
@@ -1035,6 +1070,19 @@ const App: React.FC = () => {
         onUpdate={setSettings}
         apiKey={apiKey}
         onApiKeyChange={setApiKey}
+      />
+      
+      <QueueManagementModal 
+          isOpen={managementModal.isOpen}
+          onClose={() => {
+              setManagementModal(prev => ({ ...prev, isOpen: false }));
+              // User specified: "If it is closed then the system continues again."
+              setIsPaused(false);
+          }}
+          title={managementModal.type === 'error' ? 'Failed Items Manager' : 'Upload Queue Manager'}
+          items={managementModal.type === 'error' ? errorQueue : activeQueue}
+          onDelete={handleBulkDelete}
+          onRetry={managementModal.type === 'error' ? handleBulkRetry : undefined}
       />
 
       {/* Zoom Modal */}
