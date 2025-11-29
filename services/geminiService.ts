@@ -7,8 +7,15 @@ export const fileToGenerativePart = async (file: File): Promise<string> => {
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64String = reader.result as string;
+      
+      if (!base64String) {
+        reject(new Error("Failed to convert file to base64: result is empty"));
+        return;
+      }
+
       // Remove data url prefix (e.g. "data:image/jpeg;base64,")
-      const base64Data = base64String.split(',')[1];
+      const parts = base64String.split(',');
+      const base64Data = parts.length > 1 ? parts[1] : base64String;
       resolve(base64Data);
     };
     reader.onerror = reject;
