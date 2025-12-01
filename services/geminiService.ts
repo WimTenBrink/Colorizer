@@ -94,6 +94,90 @@ export class GeminiService {
     }
   }
 
+  async generateFailureReport(file: File): Promise<{ report: string, logs: any[] }> {
+    const logs: any[] = [];
+    // Use flash for fast analysis
+    const model = 'gemini-2.5-flash'; 
+    
+    const prompt = `
+      Act as an advanced computer vision analysis tool similar to Google Cloud Vision.
+      Analyze the provided image and generate a comprehensive forensic report in Markdown format.
+      
+      The report MUST include the following sections:
+      
+      # Image Analysis Report
+      
+      ## 1. Safety Assessment (SafeSearch)
+      Provide a human-readable analysis of the safety of this image. 
+      Analyze the likelihood (Very Unlikely, Unlikely, Possible, Likely, Very Likely) for the following categories:
+      - Adult Content
+      - Violence / Gore
+      - Racy / Suggestive
+      - Medical / Surgery
+      - Spoof / Fake
+      - Harassment / Hate
+      
+      ## 2. Label Detection
+      List all identified objects, concepts, and themes in the image with high confidence.
+      
+      ## 3. Object & Logo Detection
+      Identify specific objects (bounding box context) and brand logos if present.
+      
+      ## 4. Landmark Detection
+      Identify any famous natural or man-made landmarks.
+      
+      ## 5. Image Properties
+      Describe dominant colors, lighting conditions, and composition.
+      
+      ## 6. Text Detection (OCR)
+      Transcribe any visible text found in the image.
+      
+      ## 7. Detailed Visual Description
+      Provide a neutral, factual description of the entire image content.
+    `;
+
+    try {
+      const base64Image = await fileToGenerativePart(file);
+      const mimeType = file.type;
+
+      const reqPayload: any = {
+        model,
+        contents: {
+          parts: [
+            { inlineData: { mimeType, data: base64Image } },
+            { text: prompt }
+          ]
+        },
+        config: {
+            // Permissive safety settings to ensure the report generation itself isn't blocked
+            // if the image is controversial.
+            safetySettings: [
+                { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' }
+            ]
+        }
+      };
+
+      logs.push({ type: 'req', title: 'Failure Analysis Request', data: reqPayload });
+
+      const ai = this.getAi();
+      const response: GenerateContentResponse = await ai.models.generateContent(reqPayload);
+
+      logs.push({ type: 'res', title: 'Failure Analysis Response', data: response });
+      
+      return { 
+          report: response.text || "Analysis complete but no text generated.",
+          logs 
+      };
+
+    } catch (error: any) {
+      logs.push({ type: 'err', title: 'Failure Analysis Error', data: { message: error.message, stack: error.stack } });
+      return { report: `## Analysis Failed\n\nError generating report: ${error.message}`, logs };
+    }
+  }
+
   async colorizeImage(file: File, settings: AppSettings): Promise<{ 
     imageUrl: string | null; 
     filename: string;
@@ -117,7 +201,7 @@ export class GeminiService {
       
       if (settings.revertToLineArt) {
         // Line Art Mode
-        basePrompt = "Convert this image into high-quality black and white line art. Remove all shading, gradients, and colors. Focus on clean, crisp outlines. Use shading, hatching, or shades of grey specifically to represent darker skin tones, while keeping the rest as clean line art. Maintain the original composition but strictly as line art. Do not use a Manga style unless the original is distinctly Manga. Clean up text balloons and visual noise.";
+        basePrompt = "Convert this image into high-quality black and white line art. Remove all shading, gradients, and colors. Focus on clean, crisp outlines. Use shading, hatching, or shades of grey specifically to represent darker skin tones, while keeping the rest as clean line art. Maintain the original composition but strictly as line art. Do not use a Manga style unless the original is distinctly Manga. Clean up text balloons and visual noise. Regarding content: Artistic and natural nudity is acceptable; do not heavily censor or hide it if it fits the artistic context.";
       } else {
         // Photo-realistic Colorization Mode
         basePrompt = "Colorize this image realistically. Use oil paint style. It should almost be a photo. Transform line drawings into photo-realistic images; do not retain outline lines, 'melt' them into realistic edges. If the image already has colors or a background, keep them but enhance them to be photo-realistic. Clean up the image: remove text balloons, text, and visual noise. Put more focus on the main characters. Ensure there are no white borders or whitespace on the sides. Do not use a Manga style unless the original is distinctly Manga. Treat this image as standalone. If the input contains multiple panels (like a comic page), crop/focus on and generate ONLY the largest or most significant panel as a single full image. Regarding content: Artistic and natural nudity is acceptable; do not heavily censor or hide it if it fits the artistic context.";
@@ -205,42 +289,69 @@ export class GeminiService {
         { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' }
       ];
 
-      // Map 8K to 4K as per API limits
-      const effectiveResolution = settings.resolution === '8K' ? '4K' : settings.resolution;
-
-      const reqPayload: any = {
-        model,
-        contents: {
-          parts: [
-            { inlineData: { mimeType, data: base64Image } },
-            { text: fullPrompt }
-          ]
-        },
-        config: {
-            safetySettings,
-            imageConfig: {
-                // Only set imageSize if using the Pro model, otherwise it might throw or be ignored
-                ...(model.includes('pro') && { imageSize: effectiveResolution })
-            }
-        }
-      };
-
-      logs.push({ type: 'req', title: 'Image Generation Request', data: reqPayload });
-
       const ai = this.getAi();
-      const response: GenerateContentResponse = await ai.models.generateContent(reqPayload);
-
-      logs.push({ type: 'res', title: 'Image Generation Response', data: response });
-
       let outputUrl: string | null = null;
 
-      // Parse response for image
-      if (response.candidates && response.candidates[0].content.parts) {
-        for (const part of response.candidates[0].content.parts) {
-          if (part.inlineData) {
-            outputUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-            break;
-          }
+      if (model.includes('imagen')) {
+         // --- IMAGEN MODEL PATH (Text-to-Image) ---
+         logs.push({ type: 'INFO', title: 'Mode Switch', details: 'Using Imagen Text-to-Image model. Source image visual data is NOT used for generation, only the prompts derived from settings.' });
+
+         const reqPayload: any = {
+           model,
+           prompt: fullPrompt,
+           config: {
+             numberOfImages: 1,
+             // Imagen outputs usually JPEG, but let's see. 
+             // SDK snippet uses `outputMimeType: 'image/jpeg'`
+             outputMimeType: 'image/png', 
+             aspectRatio: '1:1', // Defaulting to square since we can't easily detect input aspect ratio without HTMLImageElement
+             safetySettings
+           }
+         };
+
+         logs.push({ type: 'req', title: 'Imagen Generation Request', data: reqPayload });
+         
+         const response = await ai.models.generateImages(reqPayload);
+         logs.push({ type: 'res', title: 'Imagen Generation Response', data: response });
+
+         if (response.generatedImages && response.generatedImages[0]?.image?.imageBytes) {
+            outputUrl = `data:image/png;base64,${response.generatedImages[0].image.imageBytes}`;
+         }
+
+      } else {
+        // --- GEMINI MODEL PATH (Image-to-Image / Editing) ---
+        // Map 8K to 4K as per API limits
+        const effectiveResolution = settings.resolution === '8K' ? '4K' : settings.resolution;
+
+        const reqPayload: any = {
+            model,
+            contents: {
+            parts: [
+                { inlineData: { mimeType, data: base64Image } },
+                { text: fullPrompt }
+            ]
+            },
+            config: {
+                safetySettings,
+                imageConfig: {
+                    // Only set imageSize if using the Pro model, otherwise it might throw or be ignored
+                    ...(model.includes('pro') && { imageSize: effectiveResolution })
+                }
+            }
+        };
+
+        logs.push({ type: 'req', title: 'Gemini Generation Request', data: reqPayload });
+        const response: GenerateContentResponse = await ai.models.generateContent(reqPayload);
+        logs.push({ type: 'res', title: 'Gemini Generation Response', data: response });
+
+        // Parse response for image
+        if (response.candidates && response.candidates[0].content.parts) {
+            for (const part of response.candidates[0].content.parts) {
+            if (part.inlineData) {
+                outputUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                break;
+            }
+            }
         }
       }
 

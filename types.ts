@@ -1,5 +1,4 @@
 
-
 export interface LogEntry {
   id: string;
   timestamp: string;
@@ -58,7 +57,8 @@ export interface AppSettings {
   revertToLineArt: boolean;
   describeMode: boolean;
   extractCharacter: boolean;
-  fixErrors: boolean; 
+  fixErrors: boolean;
+  generateReports: boolean; // New option
 
   // Dropdowns
   clothingAmount: string;
@@ -83,6 +83,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   describeMode: false,
   extractCharacter: false,
   fixErrors: true, 
+  generateReports: false, // Default to false
 
   clothingAmount: 'as-is',
   targetSpecies: 'Original',
@@ -103,5 +104,7 @@ export const MODELS = {
   image: [
     { id: 'gemini-2.5-flash-image', name: 'Gemini 2.5 Flash Image (Nano Banana)' },
     { id: 'gemini-3-pro-image-preview', name: 'Gemini 3.0 Pro Image' },
+    { id: 'imagen-3.0-generate-002', name: 'Imagen 3 (Text-to-Image)' },
+    { id: 'imagen-4.0-generate-001', name: 'Imagen 4 (Text-to-Image)' },
   ]
 };

@@ -66,25 +66,23 @@ const LogItem: React.FC<{ entry: LogEntry }> = ({ entry }) => {
 };
 
 export const Console: React.FC<ConsoleProps> = ({ isOpen, onClose, logs, onClear }) => {
-  const [filter, setFilter] = useState<'ALL' | 'INFO' | 'ERROR' | 'GEMINI' | 'IMAGEN'>('ALL');
+  const [activeTab, setActiveTab] = useState<'SYSTEM' | 'ERROR' | 'GEMINI' | 'IMAGEN'>('SYSTEM');
 
   if (!isOpen) return null;
 
   const filteredLogs = logs.filter(log => {
-    if (filter === 'ALL') return true;
-    if (filter === 'INFO') return log.type === 'INFO';
-    if (filter === 'ERROR') return log.type === 'ERROR';
-    if (filter === 'GEMINI') return log.type === 'GEMINI_REQ' || log.type === 'GEMINI_RES';
-    if (filter === 'IMAGEN') return log.type === 'IMAGEN_REQ' || log.type === 'IMAGEN_RES';
+    if (activeTab === 'SYSTEM') return log.type === 'INFO';
+    if (activeTab === 'ERROR') return log.type === 'ERROR';
+    if (activeTab === 'GEMINI') return log.type === 'GEMINI_REQ' || log.type === 'GEMINI_RES';
+    if (activeTab === 'IMAGEN') return log.type === 'IMAGEN_REQ' || log.type === 'IMAGEN_RES';
     return true;
   });
 
-  const filters = [
-    { id: 'ALL', label: 'All Logs', icon: Terminal },
-    { id: 'INFO', label: 'Info', icon: Info },
+  const tabs = [
+    { id: 'SYSTEM', label: 'System Logs', icon: Info },
+    { id: 'GEMINI', label: 'Gemini (Text/Vision)', icon: Zap },
+    { id: 'IMAGEN', label: 'Imagen (Gen)', icon: ImageIcon },
     { id: 'ERROR', label: 'Errors', icon: AlertTriangle },
-    { id: 'GEMINI', label: 'Gemini IO', icon: Zap },
-    { id: 'IMAGEN', label: 'Imagen IO', icon: ImageIcon },
   ] as const;
 
   return (
@@ -113,33 +111,46 @@ export const Console: React.FC<ConsoleProps> = ({ isOpen, onClose, logs, onClear
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="flex gap-2 px-6 py-3 bg-[#161b22] border-b border-gray-800 overflow-x-auto">
-          {filters.map((f) => {
-            const Icon = f.icon;
+        {/* Tab Navigation */}
+        <div className="flex px-6 border-b border-gray-800 bg-[#0d1117] overflow-x-auto">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            // Count logs for this tab
+            const count = logs.filter(l => {
+                if (tab.id === 'SYSTEM') return l.type === 'INFO';
+                if (tab.id === 'ERROR') return l.type === 'ERROR';
+                if (tab.id === 'GEMINI') return l.type.startsWith('GEMINI');
+                if (tab.id === 'IMAGEN') return l.type.startsWith('IMAGEN');
+                return false;
+            }).length;
+
             return (
               <button
-                key={f.id}
-                onClick={() => setFilter(f.id as any)}
-                className={`flex items-center gap-2 px-4 py-1.5 text-xs font-medium rounded-full transition-all whitespace-nowrap ${
-                  filter === f.id 
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  isActive 
+                    ? 'border-blue-500 text-white bg-blue-500/5' 
+                    : 'border-transparent text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
                 }`}
               >
-                <Icon size={12} />
-                {f.label}
+                <Icon size={14} className={isActive ? 'text-blue-400' : ''} />
+                {tab.label}
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isActive ? 'bg-blue-500/20 text-blue-300' : 'bg-gray-800 text-gray-500'}`}>
+                    {count}
+                </span>
               </button>
             )
           })}
         </div>
 
         {/* Content */}
-        <div className="flex-grow overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+        <div className="flex-grow overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent bg-[#0d1117]">
           {filteredLogs.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-2">
               <Terminal size={48} className="opacity-20" />
-              <p>No logs to display</p>
+              <p>No logs in this category</p>
             </div>
           ) : (
             filteredLogs.map(log => <LogItem key={log.id} entry={log} />)

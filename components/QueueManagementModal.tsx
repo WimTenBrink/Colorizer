@@ -26,7 +26,19 @@ export const QueueManagementModal: React.FC<QueueManagementModalProps> = ({
     if (isOpen) setSelectedIds(new Set());
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  // Ensure selected IDs that no longer exist in the provided items (e.g. processed finished) are cleaned up
+  useEffect(() => {
+    if (selectedIds.size > 0) {
+        const currentItemIds = new Set(items.map(i => i.id));
+        const validSelections = new Set(Array.from(selectedIds).filter(id => currentItemIds.has(id)));
+        if (validSelections.size !== selectedIds.size) {
+            setSelectedIds(validSelections);
+        }
+    }
+  }, [items, selectedIds]);
+
+  // IMPORTANT: Do not put "if (!isOpen) return null" here, as it violates Hook rules by changing hook count between renders.
+  // Instead, return null at the very end or ensure hooks are unconditional.
 
   const toggleSelection = (id: string) => {
     const newSet = new Set(selectedIds);
@@ -44,18 +56,24 @@ export const QueueManagementModal: React.FC<QueueManagementModalProps> = ({
   };
 
   const handleDelete = () => {
-    // Direct delete without confirm dialog for better UX inside management modal
-    // User already selected items explicitly.
-    onDelete(Array.from(selectedIds));
+    const idsToDelete = Array.from(selectedIds);
+    if (idsToDelete.length === 0) return;
+    
+    // Call parent delete
+    onDelete(idsToDelete);
+    // Clear selection immediately
     setSelectedIds(new Set());
   };
 
   const handleRetry = () => {
-    if (onRetry) {
-      onRetry(Array.from(selectedIds));
+    const idsToRetry = Array.from(selectedIds);
+    if (onRetry && idsToRetry.length > 0) {
+      onRetry(idsToRetry);
       setSelectedIds(new Set());
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">

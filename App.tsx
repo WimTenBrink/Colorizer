@@ -4,7 +4,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { ManualModal } from './components/ManualModal';
 import { QueueManagementModal } from './components/QueueManagementModal';
 import { OptionsModal } from './components/OptionsModal';
-import { GeminiService } from './services/geminiService';
+import { GeminiService, fileToGenerativePart } from './services/geminiService';
 import { loadQueue, syncQueue } from './services/storageService';
 import { LogEntry, QueueItem, ProcessedItem, AppSettings, DEFAULT_SETTINGS } from './types';
 import { PROMPT_CONFIG } from './promptOptions';
@@ -25,7 +25,6 @@ interface ZoomState {
   isProcessed: boolean;
 }
 
-// Fix: Export App component so it can be imported by index.tsx
 export const App: React.FC = () => {
   // State
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -50,9 +49,9 @@ export const App: React.FC = () => {
     try {
       const saved = localStorage.getItem('katje-settings');
       // Merge saved settings with default to handle removed keys or new keys
-      return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
+      return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : { ...DEFAULT_SETTINGS };
     } catch (e) {
-      return DEFAULT_SETTINGS;
+      return { ...DEFAULT_SETTINGS };
     }
   });
 
@@ -91,19 +90,23 @@ export const App: React.FC = () => {
   // Load Queue from Storage on Mount
   useEffect(() => {
     const initQueue = async () => {
-      const savedQueue = await loadQueue();
-      if (savedQueue.length > 0) {
-        // Fix: Reset 'processing' items to 'pending' on load
-        // Items stuck in 'processing' state when the app closes will block the queue forever otherwise.
-        const sanitizedQueue = savedQueue.map(q => 
-          q.status === 'processing' ? { ...q, status: 'pending' as const } : q
-        );
-        setQueue(sanitizedQueue);
-        
-        // Optional: Log that queue was restored
-        addLog('INFO', `Restored ${savedQueue.length} items from storage`, {});
+      try {
+        const savedQueue = await loadQueue();
+        if (savedQueue.length > 0) {
+          // Fix: Reset 'processing' items to 'pending' on load
+          // Items stuck in 'processing' state when the app closes will block the queue forever otherwise.
+          const sanitizedQueue = savedQueue.map(q => 
+            q.status === 'processing' ? { ...q, status: 'pending' as const } : q
+          );
+          setQueue(sanitizedQueue);
+          
+          addLog('INFO', `Restored ${savedQueue.length} items from storage. Press Play to start.`, {});
+        }
+      } catch (e) {
+        addLog('ERROR', 'Failed to load queue from storage', e);
+      } finally {
+        setIsStorageInitialized(true);
       }
-      setIsStorageInitialized(true);
     };
     initQueue();
   }, []);
@@ -177,7 +180,6 @@ export const App: React.FC = () => {
   }, []);
 
   // Helper: Download Queue Processor
-  // Ensures downloads are spaced out to avoid browser blocking multiple files
   const processDownloadQueue = useCallback(() => {
     if (isDownloadingRef.current || downloadQueueRef.current.length === 0) return;
     
@@ -216,24 +218,26 @@ export const App: React.FC = () => {
   // Helper: Process Queue
   const processNext = useCallback(async () => {
     // CONCURRENCY CONTROL: Allow up to 2 simultaneous jobs
+    // We check queue inside the function to get the latest state via closure or ref, 
+    // but here we rely on the useEffect dependency chain to keep 'queue' fresh.
     const activeJobs = queue.filter(q => q.status === 'processing').length;
+    // Check pause and concurrency before doing anything
     if (activeJobs >= 2 || isPaused || queue.length === 0) return;
 
     // Find first pending item
-    const nextItemIndex = queue.findIndex(item => item.status === 'pending');
-    if (nextItemIndex === -1) return;
+    const item = queue.find(item => item.status === 'pending');
+    if (!item) return;
 
-    const item = queue[nextItemIndex];
+    // Critical: Capture ID for reliable updates
+    const itemId = item.id;
     
-    // Update status to processing immediately to reserve the slot
-    // This prevents subsequent triggers from picking the same item
-    setQueue(prev => prev.map((q, i) => i === nextItemIndex ? { ...q, status: 'processing', errorMessage: undefined } : q));
+    // Update status to processing immediately using ID matching to avoid race condition
+    setQueue(prev => prev.map(q => q.id === itemId ? { ...q, status: 'processing', errorMessage: undefined } : q));
 
     // Throttling: Ensure spacing between requests
-    // Even with 2 jobs, we want to avoid bursting 2 requests at the exact same millisecond
     const now = Date.now();
     const timeSinceLast = now - lastRequestTime.current;
-    const MIN_DELAY = 1000; // 1 second spacing between starts
+    const MIN_DELAY = 1000; // 1 second spacing
 
     if (timeSinceLast < MIN_DELAY) {
       await new Promise(resolve => setTimeout(resolve, MIN_DELAY - timeSinceLast));
@@ -241,12 +245,12 @@ export const App: React.FC = () => {
     lastRequestTime.current = Date.now();
 
     try {
-      addLog('INFO', `Starting job: ${item.originalName}`, { itemId: item.id, settings });
+      addLog('INFO', `Starting job: ${item.originalName}`, { itemId, settings });
 
       // Call Service
       const result = await geminiService.current.colorizeImage(item.file, settings);
 
-      // Add Service Logs to App Logs
+      // Add Service Logs
       result.logs.forEach((log: any) => {
         let type: LogEntry['type'] = 'INFO';
         if (log.type === 'req') type = log.title.includes('Image') ? 'IMAGEN_REQ' : 'GEMINI_REQ';
@@ -257,14 +261,10 @@ export const App: React.FC = () => {
 
       if (result.imageUrl) {
         
-        // Determine final filename based on settings
-        // Fallback: Browsers can't download to specific subfolders (like "Line art/") securely via 'download' attribute.
-        // As requested, we use the prefix "lineart." instead.
         const finalFilename = settings.revertToLineArt 
           ? `lineart.${result.filename}` 
           : result.filename;
 
-        // Create processed item
         const processedItem: ProcessedItem = {
           id: crypto.randomUUID(),
           originalUrl: item.previewUrl,
@@ -273,17 +273,13 @@ export const App: React.FC = () => {
           timestamp: Date.now()
         };
 
-        // Limit processed items to latest 50
         setProcessed(prev => [processedItem, ...prev].slice(0, 50));
-
-        // Auto Download Image using Queue
         queueDownload(result.imageUrl, `${finalFilename}.png`);
-        addLog('INFO', `Queued download: ${finalFilename}.png`, { url: result.imageUrl });
+        addLog('INFO', `Completed: ${finalFilename}.png`, {});
         
-        // Describe Mode - Generate Story
+        // Describe Mode
         if (settings.describeMode && !settings.revertToLineArt) {
           addLog('INFO', `Generating story for: ${finalFilename}`, {});
-          // Extract base64 from data url
           const base64Data = result.imageUrl.split(',')[1];
           const storyResult = await geminiService.current.generateStory(base64Data, settings.geminiModel);
           
@@ -299,15 +295,12 @@ export const App: React.FC = () => {
              const mdContent = `${storyResult.content}\n\n---\n\n![Generated Image](${result.imageUrl})`;
              const blob = new Blob([mdContent], { type: 'text/markdown' });
              const mdUrl = URL.createObjectURL(blob);
-             
-             // Auto Download Markdown using Queue
              queueDownload(mdUrl, `${finalFilename}.md`);
-             addLog('INFO', `Queued description download: ${finalFilename}.md`, {});
           }
         }
 
-        // Remove from queue on success as requested
-        setQueue(prev => prev.filter(q => q.id !== item.id));
+        // Remove from queue on success
+        setQueue(prev => prev.filter(q => q.id !== itemId));
 
       } else {
         throw new Error("No image URL returned");
@@ -315,40 +308,72 @@ export const App: React.FC = () => {
 
     } catch (error: any) {
       addLog('ERROR', `Failed to process ${item.originalName}`, error);
-      // Service logs might be in the error object if thrown customly
       if (error.logs) {
          error.logs.forEach((log: any) => addLog('ERROR', log.title, log.data));
       }
       
       const errMsg = error.error?.message || error.message || 'Unknown processing error';
 
-      setQueue(prev => {
-        return prev.map(q => {
-          if (q.id === item.id) {
-             // NO AUTO RETRY - Move directly to error state
+      // --- FAILURE ANALYSIS REPORT ---
+      // Only run if configured
+      if (settings.generateReports) {
+          try {
+             addLog('INFO', `Generating forensic report for failed item: ${item.originalName}...`, {});
+             
+             const analysis = await geminiService.current.generateFailureReport(item.file);
+             
+             analysis.logs.forEach((log: any) => {
+                 let type: LogEntry['type'] = 'INFO';
+                 if (log.type === 'req') type = 'GEMINI_REQ';
+                 if (log.type === 'res') type = 'GEMINI_RES';
+                 if (log.type === 'err') type = 'ERROR';
+                 addLog(type, log.title, log.data);
+             });
+    
+             // Prepare Markdown with embedded image
+             if (analysis.report && analysis.report.length > 50) {
+                 const base64Data = await fileToGenerativePart(item.file);
+                 const dataUrl = `data:${item.file.type};base64,${base64Data}`;
+                 
+                 const finalMarkdown = `${analysis.report}\n\n---\n\n## Source Image\n\n![Source Image](${dataUrl})`;
+                 
+                 const blob = new Blob([finalMarkdown], { type: 'text/markdown' });
+                 const url = URL.createObjectURL(blob);
+                 const reportName = `REPORT_${item.originalName.replace(/\.[^/.]+$/, "")}.md`;
+                 
+                 queueDownload(url, reportName);
+                 addLog('INFO', `Report downloaded: ${reportName}`, {});
+             } else {
+                 addLog('ERROR', 'Skipped report download: Analysis result was empty or too short.', {});
+             }
+    
+          } catch (reportErr) {
+              console.error(reportErr);
+              addLog('ERROR', 'Failed to generate forensic report', reportErr);
+          }
+      }
+      // ------------------------------------
+
+      // Mark as error using ID
+      setQueue(prev => prev.map(q => {
+          if (q.id === itemId) {
              return { ...q, status: 'error', errorMessage: errMsg };
           }
           return q;
-        });
-      });
-
+      }));
     }
-    // We don't have a specific "finally" state update because removal/error status 
-    // happens above, which triggers the useEffect watcher to pick up the next item.
   }, [queue, isPaused, settings, addLog, queueDownload]);
 
   // Queue Watcher
   useEffect(() => {
-    // Check concurrent jobs count
     const activeJobs = queue.filter(q => q.status === 'processing').length;
-    
-    // If we have slots available (< 2) and pending items, process next
+    // Process next if slots available and not paused
     if (activeJobs < 2 && !isPaused && queue.some(q => q.status === 'pending')) {
       processNext();
     }
   }, [queue, isPaused, processNext]);
 
-  // Zoom Navigation Logic
+  // Zoom Navigation
   const handleZoomNext = useCallback(() => {
     if (!zoomedItem || !zoomedItem.isProcessed || !zoomedItem.id) return;
     const idx = processed.findIndex(p => p.id === zoomedItem.id);
@@ -379,7 +404,6 @@ export const App: React.FC = () => {
     }
   }, [zoomedItem, processed]);
 
-  // Keyboard Navigation for Zoom
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!zoomedItem) return;
@@ -398,7 +422,6 @@ export const App: React.FC = () => {
       const files = Array.from(e.target.files) as File[];
       addFilesToQueue(files);
     }
-    // Reset input
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -415,7 +438,7 @@ export const App: React.FC = () => {
       }));
     
     setQueue(prev => [...prev, ...newItems]);
-    addLog('INFO', `Added ${files.length} files to queue`, newItems.map(i => i.originalName));
+    addLog('INFO', `Added ${files.length} files to queue`, {});
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -427,7 +450,6 @@ export const App: React.FC = () => {
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // Only set to false if we are leaving the main container
     if (e.currentTarget.contains(e.relatedTarget as Node)) return;
     setIsDragging(false);
   };
@@ -450,40 +472,31 @@ export const App: React.FC = () => {
   };
 
   const handleRetry = (id: string) => {
-    addLog('INFO', 'Retrying item', { id });
     setQueue(prev => prev.map(item => 
-      item.id === id 
-        ? { ...item, status: 'pending', errorMessage: undefined, retryCount: 0 } 
-        : item
+      item.id === id ? { ...item, status: 'pending', errorMessage: undefined, retryCount: 0 } : item
     ));
   };
 
   const handleRetryAll = () => {
-    const errorItems = queue.filter(q => q.status === 'error');
-    if (errorItems.length === 0) return;
-    
-    addLog('INFO', 'Retrying all failed items', { count: errorItems.length });
     setQueue(prev => prev.map(item => 
-      item.status === 'error'
-        ? { ...item, status: 'pending', errorMessage: undefined, retryCount: 0 }
-        : item
+      item.status === 'error' ? { ...item, status: 'pending', errorMessage: undefined, retryCount: 0 } : item
     ));
   };
   
   const handleClearQueue = () => {
     if (window.confirm('Are you sure you want to clear the upload queue?')) {
       setQueue([]);
-      addLog('INFO', 'Queue cleared by user', {});
     }
   };
   
-  const handleBulkDelete = (ids: string[]) => {
+  // Use callback to ensure stable reference for the modal
+  const handleBulkDelete = useCallback((ids: string[]) => {
     if (!ids || ids.length === 0) return;
     setQueue(prev => prev.filter(item => !ids.includes(item.id)));
     addLog('INFO', `Bulk deleted ${ids.length} items`, {});
-  };
+  }, [addLog]);
 
-  const handleBulkRetry = (ids: string[]) => {
+  const handleBulkRetry = useCallback((ids: string[]) => {
     if (!ids || ids.length === 0) return;
     setQueue(prev => prev.map(item => 
       ids.includes(item.id) 
@@ -491,9 +504,8 @@ export const App: React.FC = () => {
         : item
     ));
     addLog('INFO', `Bulk retrying ${ids.length} items`, {});
-  };
+  }, [addLog]);
 
-  // Filter queues for display
   const errorQueue = queue.filter(q => q.status === 'error');
   const activeQueue = queue.filter(q => q.status === 'pending' || q.status === 'processing');
 
@@ -502,7 +514,6 @@ export const App: React.FC = () => {
       className="flex flex-col h-screen bg-[#0d1117] text-gray-200 font-sans"
       onPaste={handlePaste}
     >
-      {/* Header */}
       <header className="flex items-center justify-between px-6 py-4 bg-[#161b22] border-b border-gray-800 shrink-0 z-20 relative">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-3">
@@ -515,7 +526,6 @@ export const App: React.FC = () => {
             </div>
           </div>
           
-          {/* Pause Button */}
           <button
              onClick={() => setIsPaused(!isPaused)}
              className={`flex items-center justify-center w-10 h-10 rounded-full transition-all ${isPaused ? 'bg-green-500/20 text-green-500 hover:bg-green-500/30' : 'bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30'}`}
@@ -524,12 +534,11 @@ export const App: React.FC = () => {
             {isPaused ? <Play size={20} className="fill-current" /> : <Pause size={20} className="fill-current" />}
           </button>
 
-          {/* Error Display */}
           {recentErrors.length > 0 && (
             <div className="relative z-50">
                 <button 
                   onClick={() => setShowErrorHistory(!showErrorHistory)}
-                  className="flex items-center gap-2 max-w-[200px] md:max-w-[300px] px-3 py-1.5 bg-red-950/30 border border-red-900/50 rounded-lg text-xs font-bold text-red-500 hover:bg-red-950/50 transition-colors animate-in fade-in"
+                  className="flex items-center gap-2 max-w-[200px] md:max-w-[300px] px-3 py-1.5 bg-red-950/30 border border-red-900/50 rounded-lg text-xs font-bold text-red-500 hover:bg-red-950/50 transition-colors"
                 >
                    <AlertTriangle size={14} className="shrink-0" />
                    <span className="truncate">{recentErrors[0]}</span>
@@ -538,10 +547,10 @@ export const App: React.FC = () => {
                 {showErrorHistory && (
                   <>
                     <div className="fixed inset-0 z-30" onClick={() => setShowErrorHistory(false)} />
-                    <div className="absolute top-full left-0 mt-2 w-80 bg-[#161b22] border border-red-900/50 rounded-xl shadow-2xl z-40 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div className="absolute top-full left-0 mt-2 w-80 bg-[#161b22] border border-red-900/50 rounded-xl shadow-2xl z-40 overflow-hidden">
                         <div className="flex items-center justify-between px-3 py-2 bg-red-950/30 border-b border-red-900/30">
                             <span className="text-[10px] font-bold text-red-400 uppercase">Recent Errors</span>
-                             <button onClick={(e) => { e.stopPropagation(); setRecentErrors([]); setShowErrorHistory(false); }} className="text-red-400 hover:text-white p-1 rounded hover:bg-red-900/50 transition-colors"><Trash2 size={12} /></button>
+                             <button onClick={(e) => { e.stopPropagation(); setRecentErrors([]); setShowErrorHistory(false); }} className="text-red-400 hover:text-white p-1 rounded hover:bg-red-900/50"><Trash2 size={12} /></button>
                         </div>
                         {recentErrors.map((err, i) => (
                             <div key={i} className={`px-3 py-2 text-xs text-red-300 border-b border-red-900/10 last:border-0 ${i === 0 ? 'bg-red-900/10 font-medium' : ''}`}>
@@ -554,7 +563,6 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* Stats Bar */}
           <div className="hidden lg:flex items-center gap-2 bg-[#0d1117] px-3 py-1.5 rounded-lg border border-gray-800">
              <div className="flex items-center gap-1.5 px-2 border-r border-gray-800">
                <span className="w-2 h-2 rounded-full bg-gray-500"></span>
@@ -576,7 +584,6 @@ export const App: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-           
            <button
              onClick={() => setIsOptionsModalOpen(true)}
              className="flex items-center gap-2 px-3 py-2 bg-gray-800 text-gray-400 border border-transparent hover:bg-gray-700 hover:text-white rounded-lg text-sm font-medium transition-all"
@@ -630,7 +637,6 @@ export const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Content Grid with Drag & Drop */}
       <div 
         className={`flex flex-grow overflow-hidden relative transition-colors duration-200 ${isDragging ? 'bg-blue-900/10' : ''}`}
         onDragOver={handleDragOver}
@@ -646,7 +652,6 @@ export const App: React.FC = () => {
           </div>
         )}
         
-        {/* Left Sidebar - Failed Items */}
         <div className="hidden md:flex w-[200px] lg:w-80 bg-[#0d1117] border-r border-gray-800 flex-col shadow-xl z-10">
            <div 
              className="p-4 border-b border-gray-800 cursor-pointer hover:bg-gray-800/50 transition-colors group"
@@ -704,7 +709,6 @@ export const App: React.FC = () => {
            </div>
         </div>
 
-        {/* Main Area - Gallery */}
         <main className="flex-1 overflow-y-auto p-6 bg-[#0d1117] relative">
           {processed.length === 0 ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-600 pointer-events-none">
@@ -718,11 +722,11 @@ export const App: React.FC = () => {
                </p>
             </div>
           ) : (
-             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+             <div className="columns-1 sm:columns-2 lg:columns-3 gap-6 pb-20">
                 {processed.map(item => (
                   <div 
                     key={item.id} 
-                    className="group relative bg-[#161b22] rounded-xl overflow-hidden shadow-xl border border-gray-800 transition-transform hover:-translate-y-1 cursor-pointer"
+                    className="break-inside-avoid mb-6 group relative bg-[#161b22] rounded-xl overflow-hidden shadow-xl border border-gray-800 transition-transform hover:-translate-y-1 cursor-pointer"
                     onClick={() => setZoomedItem({ 
                         id: item.id,
                         url: item.processedUrl, 
@@ -731,11 +735,11 @@ export const App: React.FC = () => {
                         isProcessed: true
                     })}
                   >
-                    <div className="aspect-[4/3] bg-gray-900 overflow-hidden relative">
+                    <div className="relative bg-gray-900 overflow-hidden">
                       <img 
                         src={item.processedUrl} 
                         alt={item.fileName} 
-                        className="w-full h-full object-cover"
+                        className="w-full h-auto block"
                       />
                       <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 pointer-events-none">
                          <div className="p-3 bg-white/10 backdrop-blur-md text-white border border-white/20 rounded-full">
@@ -743,7 +747,7 @@ export const App: React.FC = () => {
                          </div>
                       </div>
                     </div>
-                    <div className="p-4">
+                    <div className="p-4 border-t border-gray-800">
                       <h4 className="font-medium text-white truncate" title={item.fileName}>{item.fileName}</h4>
                       <p className="text-xs text-gray-500 mt-1 flex items-center justify-between">
                         <span>Original: {queue.find(q => q.previewUrl === item.originalUrl)?.originalName || 'unknown'}</span>
@@ -755,7 +759,6 @@ export const App: React.FC = () => {
           )}
         </main>
 
-        {/* Right Sidebar - Active Queue & Upload */}
         <aside 
           className="w-80 bg-[#161b22] border-l border-gray-800 flex flex-col shadow-2xl z-10"
         >
@@ -763,7 +766,6 @@ export const App: React.FC = () => {
             <div 
                 className="flex items-center justify-between mb-4 cursor-pointer hover:text-white transition-colors group"
                 onClick={(e) => {
-                    // Prevent triggering if clicking the trash icon (clear all)
                     if ((e.target as HTMLElement).closest('button')) return; 
                     setIsPaused(true);
                     setManagementModal({ isOpen: true, type: 'queue' });
@@ -843,12 +845,10 @@ export const App: React.FC = () => {
 
       </div>
 
-      {/* Footer */}
       <footer className="px-6 py-3 bg-[#161b22] border-t border-gray-800 text-center text-[10px] text-gray-600 tracking-wide shrink-0">
         KATJE - Knowledge And Technology Joyfully Engaged
       </footer>
 
-      {/* Modals */}
       <Console 
         isOpen={isConsoleOpen} 
         onClose={() => setIsConsoleOpen(false)} 
@@ -881,8 +881,7 @@ export const App: React.FC = () => {
           isOpen={managementModal.isOpen}
           onClose={() => {
               setManagementModal(prev => ({ ...prev, isOpen: false }));
-              // User specified: "If it is closed then the system continues again."
-              setIsPaused(false);
+              // Do not auto-unpause here; let user control it
           }}
           title={managementModal.type === 'error' ? 'Failed Items Manager' : 'Upload Queue Manager'}
           items={managementModal.type === 'error' ? errorQueue : activeQueue}
@@ -890,16 +889,13 @@ export const App: React.FC = () => {
           onRetry={managementModal.type === 'error' ? handleBulkRetry : undefined}
       />
 
-      {/* Zoom Modal */}
       {zoomedItem && (
         <div 
           className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 cursor-default animate-in fade-in duration-200"
           onClick={(e) => {
-             // Close only if clicking the background
              if (e.target === e.currentTarget) setZoomedItem(null);
           }}
         >
-          {/* Navigation Buttons - Only for processed gallery items */}
           <button 
             onClick={(e) => { e.stopPropagation(); handleZoomPrev(); }}
             className={`absolute left-4 p-4 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-all disabled:opacity-20 disabled:cursor-not-allowed ${!zoomedItem.isProcessed ? 'hidden' : ''}`}

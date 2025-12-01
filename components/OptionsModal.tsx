@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { AppSettings, DEFAULT_SETTINGS } from '../types';
 import { PROMPT_CONFIG } from '../promptOptions';
@@ -6,7 +5,7 @@ import {
   X, UserRoundCog, Shirt, Map, Zap, 
   CheckCircle, Scissors, PenTool, BookOpen, 
   Mountain, Sun, Cpu, Baby, Users, Footprints, 
-  RefreshCw, Palette, RotateCcw
+  RefreshCw, Palette, RotateCcw, FileText
 } from 'lucide-react';
 
 interface OptionsModalProps {
@@ -19,6 +18,7 @@ interface OptionsModalProps {
 export const OptionsModal: React.FC<OptionsModalProps> = ({ isOpen, onClose, settings, onUpdate }) => {
   const [activeTab, setActiveTab] = useState<'character' | 'attire' | 'world' | 'tools'>('character');
 
+  // Prevent hook errors by returning ONLY after hooks
   if (!isOpen) return null;
 
   const tabs = [
@@ -30,7 +30,9 @@ export const OptionsModal: React.FC<OptionsModalProps> = ({ isOpen, onClose, set
 
   const handleReset = () => {
     if (window.confirm('Are you sure you want to reset all options to their default values?')) {
-      onUpdate(DEFAULT_SETTINGS);
+      // Create a completely new object reference to ensure React triggers updates
+      const resetSettings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+      onUpdate(resetSettings);
     }
   };
 
@@ -371,6 +373,27 @@ export const OptionsModal: React.FC<OptionsModalProps> = ({ isOpen, onClose, set
                           </div>
                         </div>
                         <div className={`w-4 h-4 rounded-full border-2 ${settings.describeMode && !settings.revertToLineArt ? 'bg-yellow-500 border-yellow-500' : 'border-gray-600'}`} />
+                      </button>
+
+                      {/* Generate Reports (New) */}
+                      <button
+                        onClick={() => onUpdate({ ...settings, generateReports: !settings.generateReports })}
+                        className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
+                          settings.generateReports
+                            ? 'bg-red-900/20 border-red-500/50 text-red-200' 
+                            : 'bg-[#161b22] border-gray-800 text-gray-400 hover:border-gray-600'
+                        }`}
+                      >
+                         <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-lg ${settings.generateReports ? 'bg-red-500/20 text-red-400' : 'bg-gray-800 text-gray-500'}`}>
+                             <FileText size={20} />
+                          </div>
+                          <div className="text-left">
+                            <span className="block font-bold">Generate Reports</span>
+                            <span className="text-xs opacity-70">Analyze failed images</span>
+                          </div>
+                        </div>
+                        <div className={`w-4 h-4 rounded-full border-2 ${settings.generateReports ? 'bg-red-500 border-red-500' : 'border-gray-600'}`} />
                       </button>
                    </div>
                 </div>
