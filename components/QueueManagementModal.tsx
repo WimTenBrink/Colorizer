@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { QueueItem } from '../types';
 import { X, Trash2, RotateCcw, CheckSquare, Square } from 'lucide-react';
@@ -21,6 +23,9 @@ export const QueueManagementModal: React.FC<QueueManagementModalProps> = ({
 }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // Prevent hook errors by returning ONLY after hooks
+  if (!isOpen) return null;
+
   // Reset selection when opened
   useEffect(() => {
     if (isOpen) setSelectedIds(new Set());
@@ -36,9 +41,6 @@ export const QueueManagementModal: React.FC<QueueManagementModalProps> = ({
         }
     }
   }, [items, selectedIds]);
-
-  // IMPORTANT: Do not put "if (!isOpen) return null" here, as it violates Hook rules by changing hook count between renders.
-  // Instead, return null at the very end or ensure hooks are unconditional.
 
   const toggleSelection = (id: string) => {
     const newSet = new Set(selectedIds);
@@ -72,8 +74,6 @@ export const QueueManagementModal: React.FC<QueueManagementModalProps> = ({
       setSelectedIds(new Set());
     }
   };
-
-  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -148,6 +148,9 @@ export const QueueManagementModal: React.FC<QueueManagementModalProps> = ({
                                 <div className={`absolute inset-0 bg-black/40 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                                     <div className="absolute top-2 left-2">
                                          {isSelected ? <CheckSquare className="text-blue-400 bg-black/50 rounded" size={20} /> : <Square className="text-white/70" size={20} />}
+                                    </div>
+                                    <div className="absolute bottom-2 right-2 bg-black/70 px-1.5 py-0.5 rounded text-[10px] font-mono text-white">
+                                        x{item.iterations}
                                     </div>
                                 </div>
                                 <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/90 to-transparent">

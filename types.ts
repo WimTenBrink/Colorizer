@@ -1,4 +1,5 @@
 
+
 export interface LogEntry {
   id: string;
   timestamp: string;
@@ -15,6 +16,7 @@ export interface QueueItem {
   originalName: string;
   errorMessage?: string;
   retryCount?: number;
+  iterations: number; // Number of times to process this item
 }
 
 export interface ProcessedItem {
@@ -37,12 +39,21 @@ export interface PromptConfig {
   genders: PromptOption[];
   hairColors: PromptOption[];
   skinTones: PromptOption[];
+  eyeColors: PromptOption[]; // New
+  bodyMods: PromptOption[]; // New
   techLevels: PromptOption[];
   ageGroups: PromptOption[];
   timeOfDay: PromptOption[];
   footwear: PromptOption[];
   backgrounds: PromptOption[];
   clothing: PromptOption[];
+  items: PromptOption[]; // New
+  creatures: PromptOption[]; // New
+  weather: PromptOption[]; // New
+  lighting: PromptOption[]; // New
+  moods: PromptOption[]; // New
+  cameraAngles: PromptOption[]; // New
+  aspectRatios: PromptOption[]; // New
 }
 
 // Settings Interface - using string to allow dynamic loading from config
@@ -58,18 +69,34 @@ export interface AppSettings {
   describeMode: boolean;
   extractCharacter: boolean;
   fixErrors: boolean;
-  generateReports: boolean; // New option
+  generateReports: boolean;
+  defaultIterations: number; // New setting
 
-  // Dropdowns
-  clothingAmount: string;
+  // Subject
   targetSpecies: string;
   targetGender: string;
-  targetHair: string;
-  targetSkin: string;
-  techLevel: string;
   targetAge: string;
-  timeOfDay: string;
+  targetSkin: string;
+  targetHair: string;
+  eyeColor: string; // New
+  bodyMod: string; // New
+  
+  // Attire & Gear
+  clothingAmount: string;
   footwear: string;
+  heldItem: string; // New
+  creature: string; // New
+
+  // World & Atmosphere
+  timeOfDay: string;
+  weather: string; // New
+  lighting: string; // New
+  
+  // Style & Camera
+  techLevel: string;
+  mood: string; // New
+  cameraType: string; // New
+  aspectRatio: string; // New
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -83,17 +110,30 @@ export const DEFAULT_SETTINGS: AppSettings = {
   describeMode: false,
   extractCharacter: false,
   fixErrors: true, 
-  generateReports: false, // Default to false
+  generateReports: false,
+  defaultIterations: 1,
 
-  clothingAmount: 'as-is',
   targetSpecies: 'Original',
   targetGender: 'Original',
-  targetHair: 'Original',
-  targetSkin: 'Original',
-  techLevel: 'Original',
   targetAge: 'Original',
+  targetSkin: 'Original',
+  targetHair: 'Original',
+  eyeColor: 'Original',
+  bodyMod: 'Original',
+
+  clothingAmount: 'as-is',
+  footwear: 'Original',
+  heldItem: 'Original',
+  creature: 'Original',
+
   timeOfDay: 'Original',
-  footwear: 'Original'
+  weather: 'Original',
+  lighting: 'Original',
+
+  techLevel: 'Original',
+  mood: 'Original',
+  cameraType: 'Original',
+  aspectRatio: '1:1',
 };
 
 export const MODELS = {

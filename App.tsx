@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Console } from './components/Console';
 import { SettingsModal } from './components/SettingsModal';
@@ -8,7 +10,7 @@ import { GeminiService, fileToGenerativePart } from './services/geminiService';
 import { loadQueue, syncQueue } from './services/storageService';
 import { LogEntry, QueueItem, ProcessedItem, AppSettings, DEFAULT_SETTINGS } from './types';
 import { PROMPT_CONFIG } from './promptOptions';
-import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Trash2, RotateCcw, Maximize2, Eraser, ChevronLeft, ChevronRight, RefreshCw, SlidersHorizontal, Book, AlertTriangle, Play, Pause, ChevronDown } from 'lucide-react';
+import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Trash2, RotateCcw, Maximize2, Eraser, ChevronLeft, ChevronRight, RefreshCw, SlidersHorizontal, Book, AlertTriangle, Play, Pause, ChevronDown, Plus, Minus } from 'lucide-react';
 
 // Polyfill process.env for browser environments if needed
 if (typeof process === 'undefined') {
@@ -217,14 +219,12 @@ export const App: React.FC = () => {
 
   // Helper: Process Queue
   const processNext = useCallback(async () => {
-    // CONCURRENCY CONTROL: Allow up to 2 simultaneous jobs
-    // We check queue inside the function to get the latest state via closure or ref, 
-    // but here we rely on the useEffect dependency chain to keep 'queue' fresh.
+    // CONCURRENCY CONTROL: Strict sequential processing (max 1 active job)
     const activeJobs = queue.filter(q => q.status === 'processing').length;
     // Check pause and concurrency before doing anything
-    if (activeJobs >= 2 || isPaused || queue.length === 0) return;
+    if (activeJobs >= 1 || isPaused || queue.length === 0) return;
 
-    // Find first pending item
+    // Find first pending item (Top of queue)
     const item = queue.find(item => item.status === 'pending');
     if (!item) return;
 
@@ -245,7 +245,7 @@ export const App: React.FC = () => {
     lastRequestTime.current = Date.now();
 
     try {
-      addLog('INFO', `Starting job: ${item.originalName}`, { itemId, settings });
+      addLog('INFO', `Starting job: ${item.originalName} (${item.iterations} remaining)`, { itemId, settings });
 
       // Call Service
       const result = await geminiService.current.colorizeImage(item.file, settings);
@@ -264,22 +264,25 @@ export const App: React.FC = () => {
         const finalFilename = settings.revertToLineArt 
           ? `lineart.${result.filename}` 
           : result.filename;
+        
+        // Use a random suffix to ensure filenames are unique if iterating multiple times
+        const uniqueFilename = item.iterations > 1 ? `${finalFilename}_${Math.floor(Math.random()*1000)}` : finalFilename;
 
         const processedItem: ProcessedItem = {
           id: crypto.randomUUID(),
           originalUrl: item.previewUrl,
           processedUrl: result.imageUrl,
-          fileName: finalFilename,
+          fileName: uniqueFilename,
           timestamp: Date.now()
         };
 
         setProcessed(prev => [processedItem, ...prev].slice(0, 50));
-        queueDownload(result.imageUrl, `${finalFilename}.png`);
-        addLog('INFO', `Completed: ${finalFilename}.png`, {});
+        queueDownload(result.imageUrl, `${uniqueFilename}.png`);
+        addLog('INFO', `Completed: ${uniqueFilename}.png`, {});
         
         // Describe Mode
         if (settings.describeMode && !settings.revertToLineArt) {
-          addLog('INFO', `Generating story for: ${finalFilename}`, {});
+          addLog('INFO', `Generating story for: ${uniqueFilename}`, {});
           const base64Data = result.imageUrl.split(',')[1];
           const storyResult = await geminiService.current.generateStory(base64Data, settings.geminiModel);
           
@@ -295,12 +298,27 @@ export const App: React.FC = () => {
              const mdContent = `${storyResult.content}\n\n---\n\n![Generated Image](${result.imageUrl})`;
              const blob = new Blob([mdContent], { type: 'text/markdown' });
              const mdUrl = URL.createObjectURL(blob);
-             queueDownload(mdUrl, `${finalFilename}.md`);
+             queueDownload(mdUrl, `${uniqueFilename}.md`);
           }
         }
 
-        // Remove from queue on success
-        setQueue(prev => prev.filter(q => q.id !== itemId));
+        // --- QUEUE LOGIC FOR ITERATIONS ---
+        setQueue(prev => {
+          const current = prev.find(q => q.id === itemId);
+          if (!current) return prev; // Should not happen
+
+          // If more iterations needed
+          if (current.iterations > 1) {
+            // Keep at same position (top) to continue processing this item
+            return prev.map(q => 
+              q.id === itemId 
+                ? { ...q, status: 'pending', iterations: q.iterations - 1, retryCount: 0, errorMessage: undefined } 
+                : q
+            );
+          }
+          // Else remove
+          return prev.filter(q => q.id !== itemId);
+        });
 
       } else {
         throw new Error("No image URL returned");
@@ -315,11 +333,9 @@ export const App: React.FC = () => {
       const errMsg = error.error?.message || error.message || 'Unknown processing error';
 
       // --- FAILURE ANALYSIS REPORT ---
-      // Only run if configured
       if (settings.generateReports) {
           try {
              addLog('INFO', `Generating forensic report for failed item: ${item.originalName}...`, {});
-             
              const analysis = await geminiService.current.generateFailureReport(item.file);
              
              analysis.logs.forEach((log: any) => {
@@ -330,33 +346,32 @@ export const App: React.FC = () => {
                  addLog(type, log.title, log.data);
              });
     
-             // Prepare Markdown with embedded image
              if (analysis.report && analysis.report.length > 50) {
                  const base64Data = await fileToGenerativePart(item.file);
                  const dataUrl = `data:${item.file.type};base64,${base64Data}`;
-                 
                  const finalMarkdown = `${analysis.report}\n\n---\n\n## Source Image\n\n![Source Image](${dataUrl})`;
-                 
                  const blob = new Blob([finalMarkdown], { type: 'text/markdown' });
                  const url = URL.createObjectURL(blob);
                  const reportName = `REPORT_${item.originalName.replace(/\.[^/.]+$/, "")}.md`;
-                 
                  queueDownload(url, reportName);
                  addLog('INFO', `Report downloaded: ${reportName}`, {});
              } else {
                  addLog('ERROR', 'Skipped report download: Analysis result was empty or too short.', {});
              }
-    
           } catch (reportErr) {
               console.error(reportErr);
               addLog('ERROR', 'Failed to generate forensic report', reportErr);
           }
       }
-      // ------------------------------------
 
-      // Mark as error using ID
+      // Mark as error OR Continue iterations if available
       setQueue(prev => prev.map(q => {
           if (q.id === itemId) {
+             // Multi-iteration resilience: If failed, but more iterations exist, decrement and queue again.
+             // It stays at the top of the queue as 'pending' to retry immediately.
+             if (q.iterations > 1) {
+                 return { ...q, status: 'pending', iterations: q.iterations - 1, errorMessage: undefined };
+             }
              return { ...q, status: 'error', errorMessage: errMsg };
           }
           return q;
@@ -366,9 +381,9 @@ export const App: React.FC = () => {
 
   // Queue Watcher
   useEffect(() => {
+    // Only trigger if no active job and pending items exist
     const activeJobs = queue.filter(q => q.status === 'processing').length;
-    // Process next if slots available and not paused
-    if (activeJobs < 2 && !isPaused && queue.some(q => q.status === 'pending')) {
+    if (activeJobs < 1 && !isPaused && queue.some(q => q.status === 'pending')) {
       processNext();
     }
   }, [queue, isPaused, processNext]);
@@ -434,11 +449,22 @@ export const App: React.FC = () => {
         previewUrl: URL.createObjectURL(f),
         status: 'pending',
         originalName: f.name,
-        retryCount: 0
+        retryCount: 0,
+        iterations: settings.defaultIterations || 1 // Use setting value
       }));
     
     setQueue(prev => [...prev, ...newItems]);
     addLog('INFO', `Added ${files.length} files to queue`, {});
+  };
+
+  const updateIterations = (id: string, delta: number) => {
+    setQueue(prev => prev.map(item => {
+        if (item.id === id) {
+            const newVal = Math.max(1, item.iterations + delta);
+            return { ...item, iterations: newVal };
+        }
+        return item;
+    }));
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -471,16 +497,36 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleRetry = (id: string) => {
-    setQueue(prev => prev.map(item => 
-      item.id === id ? { ...item, status: 'pending', errorMessage: undefined, retryCount: 0 } : item
-    ));
-  };
+  // Move retried item to BOTTOM of queue
+  const handleRetry = useCallback((id: string) => {
+    setQueue(prev => {
+        const item = prev.find(i => i.id === id);
+        if (!item) return prev;
+        
+        // Remove from current position and append to end
+        const others = prev.filter(i => i.id !== id);
+        return [
+            ...others, 
+            { ...item, status: 'pending', errorMessage: undefined, retryCount: 0 }
+        ];
+    });
+  }, []);
 
   const handleRetryAll = () => {
-    setQueue(prev => prev.map(item => 
-      item.status === 'error' ? { ...item, status: 'pending', errorMessage: undefined, retryCount: 0 } : item
-    ));
+    // Retrying ALL failed items: move them all to the bottom
+    setQueue(prev => {
+        const errorItems = prev.filter(i => i.status === 'error');
+        const otherItems = prev.filter(i => i.status !== 'error');
+        
+        const retriedItems = errorItems.map(item => ({
+            ...item,
+            status: 'pending' as const,
+            errorMessage: undefined,
+            retryCount: 0
+        }));
+
+        return [...otherItems, ...retriedItems];
+    });
   };
   
   const handleClearQueue = () => {
@@ -489,24 +535,33 @@ export const App: React.FC = () => {
     }
   };
   
-  // Use callback to ensure stable reference for the modal
   const handleBulkDelete = useCallback((ids: string[]) => {
     if (!ids || ids.length === 0) return;
     setQueue(prev => prev.filter(item => !ids.includes(item.id)));
     addLog('INFO', `Bulk deleted ${ids.length} items`, {});
   }, [addLog]);
 
+  // Bulk Retry: Move all selected to bottom
   const handleBulkRetry = useCallback((ids: string[]) => {
     if (!ids || ids.length === 0) return;
-    setQueue(prev => prev.map(item => 
-      ids.includes(item.id) 
-        ? { ...item, status: 'pending', errorMessage: undefined, retryCount: 0 } 
-        : item
-    ));
-    addLog('INFO', `Bulk retrying ${ids.length} items`, {});
+    setQueue(prev => {
+        const itemsToRetry = prev.filter(i => ids.includes(i.id));
+        const others = prev.filter(i => !ids.includes(i.id));
+        
+        const resetItems = itemsToRetry.map(item => ({
+            ...item,
+            status: 'pending' as const,
+            errorMessage: undefined,
+            retryCount: 0
+        }));
+        
+        return [...others, ...resetItems];
+    });
+    addLog('INFO', `Bulk retrying ${ids.length} items (moved to end of queue)`, {});
   }, [addLog]);
 
   const errorQueue = queue.filter(q => q.status === 'error');
+  // Order matters for display: Show in actual queue order
   const activeQueue = queue.filter(q => q.status === 'pending' || q.status === 'processing');
 
   return (
@@ -829,18 +884,35 @@ export const App: React.FC = () => {
                  </div>
                  <div className="flex flex-col gap-1">
                    <p className="text-sm font-medium text-gray-300 truncate" title={item.originalName}>{item.originalName}</p>
-                   <div className="flex items-center gap-2 mt-1">
-                     {item.status === 'pending' && <span className="text-xs text-gray-500 flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Pending</span>}
-                     {item.status === 'processing' && <span className="text-xs text-blue-400 flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Processing...</span>}
-                     {item.status === 'completed' && <span className="text-xs text-green-400 flex items-center gap-1"><CheckCircle size={10} /> Done</span>}
+                   
+                   <div className="flex items-center justify-between mt-1">
+                     <div className="flex items-center gap-2">
+                        {item.status === 'pending' && <span className="text-xs text-gray-500 flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Pending</span>}
+                        {item.status === 'processing' && <span className="text-xs text-blue-400 flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Processing...</span>}
+                        {item.status === 'completed' && <span className="text-xs text-green-400 flex items-center gap-1"><CheckCircle size={10} /> Done</span>}
+                     </div>
+                     
+                     {/* Iteration Counter */}
+                     <div className="flex items-center bg-black/30 rounded-md border border-gray-700/50 p-0.5">
+                       {item.status === 'pending' && isPaused ? (
+                          <>
+                           <button onClick={() => updateIterations(item.id, -1)} className="p-1 hover:bg-gray-700 rounded text-gray-400 hover:text-white"><Minus size={10}/></button>
+                           <span className="text-xs font-mono w-6 text-center text-gray-300">{item.iterations}</span>
+                           <button onClick={() => updateIterations(item.id, 1)} className="p-1 hover:bg-gray-700 rounded text-gray-400 hover:text-white"><Plus size={10}/></button>
+                          </>
+                       ) : (
+                          <span className="text-[10px] text-gray-500 font-mono px-2">x{item.iterations}</span>
+                       )}
+                     </div>
                    </div>
+
                    {item.retryCount! > 0 && (
                      <span className="text-[10px] text-yellow-500">Retry attempt #{item.retryCount}</span>
                    )}
                  </div>
                </div>
              ))}
-          </div>
+           </div>
         </aside>
 
       </div>

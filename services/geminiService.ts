@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { AppSettings } from "../types";
 import { PROMPT_CONFIG } from "../promptOptions";
@@ -220,59 +221,32 @@ export class GeminiService {
 
       // --- New Features Logic (Dynamic from Config) ---
 
-      // Species Transformation
-      const speciesOpt = PROMPT_CONFIG.species.find(o => o.value === settings.targetSpecies);
-      if (speciesOpt && speciesOpt.prompt) {
-        basePrompt += " " + speciesOpt.prompt;
-      }
+      // Helper to append option
+      const append = (list: any[], val: string) => {
+        const opt = list.find(o => o.value === val);
+        if (opt && opt.prompt) basePrompt += " " + opt.prompt;
+      };
+
+      append(PROMPT_CONFIG.species, settings.targetSpecies);
+      append(PROMPT_CONFIG.genders, settings.targetGender);
+      append(PROMPT_CONFIG.ageGroups, settings.targetAge);
+      append(PROMPT_CONFIG.skinTones, settings.targetSkin);
+      append(PROMPT_CONFIG.hairColors, settings.targetHair);
+      append(PROMPT_CONFIG.eyeColors, settings.eyeColor);
+      append(PROMPT_CONFIG.bodyMods, settings.bodyMod);
       
-      // Gender Transformation
-      const genderOpt = PROMPT_CONFIG.genders.find(o => o.value === settings.targetGender);
-      if (genderOpt && genderOpt.prompt) {
-        basePrompt += " " + genderOpt.prompt;
-      }
+      append(PROMPT_CONFIG.clothing, settings.clothingAmount);
+      append(PROMPT_CONFIG.footwear, settings.footwear);
+      append(PROMPT_CONFIG.items, settings.heldItem);
+      append(PROMPT_CONFIG.creatures, settings.creature);
+
+      append(PROMPT_CONFIG.timeOfDay, settings.timeOfDay);
+      append(PROMPT_CONFIG.weather, settings.weather);
+      append(PROMPT_CONFIG.lighting, settings.lighting);
       
-      // Hair Color
-      const hairOpt = PROMPT_CONFIG.hairColors.find(o => o.value === settings.targetHair);
-      if (hairOpt && hairOpt.prompt) {
-        basePrompt += " " + hairOpt.prompt;
-      }
-      
-      // Skin Tone
-      const skinOpt = PROMPT_CONFIG.skinTones.find(o => o.value === settings.targetSkin);
-      if (skinOpt && skinOpt.prompt) {
-        basePrompt += " " + skinOpt.prompt;
-      }
-
-      // Time of Day
-      const timeOpt = PROMPT_CONFIG.timeOfDay.find(o => o.value === settings.timeOfDay);
-      if (timeOpt && timeOpt.prompt) {
-        basePrompt += " " + timeOpt.prompt;
-      }
-
-      // Tech Level Transformation
-      const techOpt = PROMPT_CONFIG.techLevels.find(o => o.value === settings.techLevel);
-      if (techOpt && techOpt.prompt) {
-        basePrompt += " " + techOpt.prompt;
-      }
-
-      // Age Transformation
-      const ageOpt = PROMPT_CONFIG.ageGroups.find(o => o.value === settings.targetAge);
-      if (ageOpt && ageOpt.prompt) {
-         basePrompt += " " + ageOpt.prompt;
-      }
-
-      // Clothing Adjustment
-      const clothingOpt = PROMPT_CONFIG.clothing.find(o => o.value === settings.clothingAmount);
-      if (clothingOpt && clothingOpt.prompt) {
-        basePrompt += " " + clothingOpt.prompt;
-      }
-
-      // Footwear Adjustment
-      const footwearOpt = PROMPT_CONFIG.footwear.find(o => o.value === settings.footwear);
-      if (footwearOpt && footwearOpt.prompt) {
-         basePrompt += " " + footwearOpt.prompt;
-      }
+      append(PROMPT_CONFIG.techLevels, settings.techLevel);
+      append(PROMPT_CONFIG.moods, settings.mood);
+      append(PROMPT_CONFIG.cameraAngles, settings.cameraType);
 
       // Fix Errors (Conditional)
       if (settings.fixErrors) {
@@ -301,10 +275,8 @@ export class GeminiService {
            prompt: fullPrompt,
            config: {
              numberOfImages: 1,
-             // Imagen outputs usually JPEG, but let's see. 
-             // SDK snippet uses `outputMimeType: 'image/jpeg'`
              outputMimeType: 'image/png', 
-             aspectRatio: '1:1', // Defaulting to square since we can't easily detect input aspect ratio without HTMLImageElement
+             aspectRatio: settings.aspectRatio || '1:1', // Pass aspect ratio to Imagen
              safetySettings
            }
          };
@@ -323,19 +295,29 @@ export class GeminiService {
         // Map 8K to 4K as per API limits
         const effectiveResolution = settings.resolution === '8K' ? '4K' : settings.resolution;
 
+        // If it's a nano/flash model, we might not support config based aspect ratio, so append it to prompt
+        // If it's the Pro Image Preview, we can try using imageConfig if supported, but typically editing implies retaining source ratio
+        // unless explicitly changed. Let's append to prompt for safety as API support for aspectRatio in edits varies.
+        // HOWEVER, 'gemini-3-pro-image-preview' supports imageConfig with aspectRatio.
+        
+        const isPro = model.includes('pro');
+        const aspectPrompt = !isPro && settings.aspectRatio !== '1:1' ? ` Change the aspect ratio to ${settings.aspectRatio}.` : '';
+
         const reqPayload: any = {
             model,
             contents: {
             parts: [
                 { inlineData: { mimeType, data: base64Image } },
-                { text: fullPrompt }
+                { text: fullPrompt + aspectPrompt }
             ]
             },
             config: {
                 safetySettings,
                 imageConfig: {
-                    // Only set imageSize if using the Pro model, otherwise it might throw or be ignored
-                    ...(model.includes('pro') && { imageSize: effectiveResolution })
+                    // Only set imageSize if using the Pro model
+                    ...(isPro && { imageSize: effectiveResolution }),
+                    // Only set aspectRatio if using Pro model (Nano doesn't support it in config)
+                    ...(isPro && { aspectRatio: settings.aspectRatio }) 
                 }
             }
         };
