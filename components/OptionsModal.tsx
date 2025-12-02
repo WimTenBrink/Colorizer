@@ -9,7 +9,7 @@ import {
   Mountain, Sun, Cpu, Baby, Users, Footprints, 
   RefreshCw, Palette, RotateCcw, FileText,
   CloudSun, Aperture, Sword, Smile, Eye, Gem, Download, Upload,
-  Copy, Repeat
+  Copy, Repeat, Settings2
 } from 'lucide-react';
 
 interface OptionsModalProps {
@@ -20,7 +20,7 @@ interface OptionsModalProps {
 }
 
 export const OptionsModal: React.FC<OptionsModalProps> = ({ isOpen, onClose, settings, onUpdate }) => {
-  const [activeTab, setActiveTab] = useState<'subject' | 'gear' | 'world' | 'style' | 'tools'>('subject');
+  const [activeTab, setActiveTab] = useState<'subject' | 'gear' | 'world' | 'style' | 'tools' | 'output'>('subject');
 
   // Prevent hook errors by returning ONLY after hooks
   if (!isOpen) return null;
@@ -30,6 +30,7 @@ export const OptionsModal: React.FC<OptionsModalProps> = ({ isOpen, onClose, set
     { id: 'gear', label: 'Gear & Companions', icon: Sword },
     { id: 'world', label: 'World & Atmosphere', icon: Map },
     { id: 'style', label: 'Style & Camera', icon: Aperture },
+    { id: 'output', label: 'Output & Batch', icon: Settings2 },
     { id: 'tools', label: 'Tools', icon: Zap },
   ] as const;
 
@@ -205,12 +206,12 @@ export const OptionsModal: React.FC<OptionsModalProps> = ({ isOpen, onClose, set
               </div>
             )}
 
-            {/* Tools Tab */}
-            {activeTab === 'tools' && (
-              <div className="space-y-8 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-300">
-                <div className="pb-4 border-b border-gray-800">
-                   <h3 className="text-xl font-bold text-white flex items-center gap-2"><Zap className="text-yellow-400"/> Processing Tools</h3>
-                   <p className="text-gray-500 mt-1">Configure generation parameters and special modes.</p>
+             {/* Output Tab */}
+             {activeTab === 'output' && (
+               <div className="space-y-8 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-300">
+                 <div className="pb-4 border-b border-gray-800">
+                   <h3 className="text-xl font-bold text-white flex items-center gap-2"><Settings2 className="text-teal-400"/> Output & Batch Settings</h3>
+                   <p className="text-gray-500 mt-1">Configure resolution and queue behavior.</p>
                 </div>
 
                 <div className="space-y-6">
@@ -232,6 +233,7 @@ export const OptionsModal: React.FC<OptionsModalProps> = ({ isOpen, onClose, set
                           </button>
                         ))}
                       </div>
+                      <p className="text-xs text-gray-500 mt-3">Note: 8K is mapped to the highest available API resolution (typically 4K for current models).</p>
                    </div>
                    
                    {/* Default Iterations */}
@@ -246,11 +248,25 @@ export const OptionsModal: React.FC<OptionsModalProps> = ({ isOpen, onClose, set
                            onChange={(e) => onUpdate({...settings, defaultIterations: Math.max(1, parseInt(e.target.value) || 1)})}
                            className="w-24 bg-black/30 border border-gray-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none"
                         />
-                        <p className="text-xs text-gray-500">Number of times to generate each new image added to the queue.</p>
+                        <div className="flex flex-col">
+                            <span className="text-sm text-gray-300">Generations per image</span>
+                            <span className="text-xs text-gray-500">How many variations to create for each new file uploaded.</span>
+                        </div>
                       </div>
                    </div>
-                   
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                </div>
+               </div>
+             )}
+
+            {/* Tools Tab */}
+            {activeTab === 'tools' && (
+              <div className="space-y-8 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="pb-4 border-b border-gray-800">
+                   <h3 className="text-xl font-bold text-white flex items-center gap-2"><Zap className="text-yellow-400"/> Processing Modes</h3>
+                   <p className="text-gray-500 mt-1">Enable special processing features and tools.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Fix Errors */}
                       <button
                         onClick={() => onUpdate({ ...settings, fixErrors: !settings.fixErrors })}
@@ -357,7 +373,6 @@ export const OptionsModal: React.FC<OptionsModalProps> = ({ isOpen, onClose, set
                         <div className={`w-4 h-4 rounded-full border-2 ${settings.generateReports ? 'bg-red-500 border-red-500' : 'border-gray-600'}`} />
                       </button>
                    </div>
-                </div>
               </div>
             )}
 

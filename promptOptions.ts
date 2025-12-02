@@ -1,4 +1,5 @@
 
+
 import { PromptConfig } from './types';
 
 // Helper to sort options alphabetically by label
@@ -260,19 +261,20 @@ export const PROMPT_CONFIG: PromptConfig = {
     { value: "Volcanic", label: "Volcanic Crater", prompt: "Replace the background with a Volcanic Crater, featuring lava and dark rock." },
   ]),
 
-  timeOfDay: sortOpts([
+  // Manually ordered to preserve chronological sequence
+  timeOfDay: [
     { value: "Original", label: "As Is / Original", prompt: "" },
-    { value: "Afternoon", label: "Afternoon", prompt: "Change the lighting and atmosphere to depict Afternoon." },
-    { value: "BlueHour", label: "Blue Hour / Twilight", prompt: "Change the lighting and atmosphere to Blue Hour. Use cool, soft, ambient light just after sunset." },
-    { value: "Evening", label: "Evening", prompt: "Change the lighting and atmosphere to Evening." },
-    { value: "GoldenHour", label: "Golden Hour", prompt: "Change the lighting and atmosphere to Golden Hour. Use warm, golden, directional light." },
-    { value: "Midnight", label: "Midnight", prompt: "Change the lighting and atmosphere to Midnight. Use deep blacks and silvery moonlight." },
-    { value: "Morning", label: "Morning", prompt: "Change the lighting and atmosphere to depict a bright, clear Morning." },
-    { value: "Night", label: "Night", prompt: "Change the lighting and atmosphere to Night. Use dark tones and moonlit highlights." },
-    { value: "Noon", label: "Noon", prompt: "Change the lighting and atmosphere to depict High Noon. Use bright, direct, overhead sunlight." },
-    { value: "Sunrise", label: "Sunrise", prompt: "Change the lighting and atmosphere to depict Sunrise. Use soft, warm, low-angle light." },
-    { value: "Sunset", label: "Sunset", prompt: "Change the lighting and atmosphere to depict Sunset. Use vibrant oranges, purples, and dramatic shadows." },
-  ]),
+    { value: "Midnight", label: "00:00-04:00 Midnight", prompt: "Change the lighting and atmosphere to Midnight. Use deep blacks and silvery moonlight." },
+    { value: "Night", label: "04:00-06:00 Night", prompt: "Change the lighting and atmosphere to Night. Use dark tones and moonlit highlights." },
+    { value: "Sunrise", label: "06:00-07:00 Sunrise", prompt: "Change the lighting and atmosphere to depict Sunrise. Use soft, warm, low-angle light." },
+    { value: "Morning", label: "07:00-11:00 Morning", prompt: "Change the lighting and atmosphere to depict a bright, clear Morning." },
+    { value: "Noon", label: "11:00-14:00 Noon", prompt: "Change the lighting and atmosphere to depict High Noon. Use bright, direct, overhead sunlight." },
+    { value: "Afternoon", label: "14:00-17:00 Afternoon", prompt: "Change the lighting and atmosphere to depict Afternoon." },
+    { value: "GoldenHour", label: "17:00-18:00 Golden Hour", prompt: "Change the lighting and atmosphere to Golden Hour. Use warm, golden, directional light." },
+    { value: "Sunset", label: "18:00-20:00 Sunset", prompt: "Change the lighting and atmosphere to depict Sunset. Use vibrant oranges, purples, and dramatic shadows." },
+    { value: "BlueHour", label: "20:00-21:00 Blue Hour", prompt: "Change the lighting and atmosphere to Blue Hour. Use cool, soft, ambient light just after sunset." },
+    { value: "Evening", label: "21:00-00:00 Evening", prompt: "Change the lighting and atmosphere to Evening." },
+  ],
 
   weather: sortOpts([
     { value: "Original", label: "As Is / Original", prompt: "" },
@@ -336,6 +338,7 @@ export const PROMPT_CONFIG: PromptConfig = {
   ]),
 
   aspectRatios: sortOpts([
+    { value: "Original", label: "As Is / Original", prompt: "" },
     { value: "1:1", label: "1:1 (Square)", prompt: "Generate image with 1:1 aspect ratio." },
     { value: "16:9", label: "16:9 (Landscape)", prompt: "Generate image with 16:9 aspect ratio." },
     { value: "9:16", label: "9:16 (Portrait)", prompt: "Generate image with 9:16 aspect ratio." },

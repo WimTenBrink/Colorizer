@@ -133,7 +133,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   techLevel: 'Original',
   mood: 'Original',
   cameraType: 'Original',
-  aspectRatio: '1:1',
+  aspectRatio: 'Original',
 };
 
 export const MODELS = {

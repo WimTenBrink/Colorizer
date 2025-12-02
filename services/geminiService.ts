@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { AppSettings } from "../types";
 import { PROMPT_CONFIG } from "../promptOptions";
@@ -28,10 +27,24 @@ export const fileToGenerativePart = async (file: File): Promise<string> => {
 export class GeminiService {
   
   private getAi(): GoogleGenAI {
-    // Strictly using process.env.API_KEY as per system instructions.
-    // We instantiate this on every call to ensure we pick up the key 
-    // if it was selected/changed at runtime.
-    const apiKey = process.env.API_KEY || '';
+    // Safely retrieve API Key from process.env or window.process.env
+    // Priority: Runtime injection (window.process) > Build time injection (process.env)
+    let apiKey = '';
+    
+    // Check runtime polyfill first (App.tsx sets this)
+    if (typeof window !== 'undefined' && (window as any).process?.env?.API_KEY) {
+        apiKey = (window as any).process.env.API_KEY;
+    } 
+    // Fallback to node/build process.env
+    else if (typeof process !== 'undefined' && process.env?.API_KEY) {
+        apiKey = process.env.API_KEY;
+    }
+    
+    // Warn if missing, but let GoogleGenAI throw the actual auth error
+    if (!apiKey) {
+        console.warn("GeminiService: API Key appears to be missing from environment variables.");
+    }
+    
     return new GoogleGenAI({ apiKey });
   }
 
@@ -202,10 +215,10 @@ export class GeminiService {
       
       if (settings.revertToLineArt) {
         // Line Art Mode
-        basePrompt = "Convert this image into high-quality black and white line art. Remove all shading, gradients, and colors. Focus on clean, crisp outlines. Use shading, hatching, or shades of grey specifically to represent darker skin tones, while keeping the rest as clean line art. Maintain the original composition but strictly as line art. Do not use a Manga style unless the original is distinctly Manga. Clean up text balloons and visual noise. Regarding content: Artistic and natural nudity is acceptable; do not heavily censor or hide it if it fits the artistic context.";
+        basePrompt = "Convert this image into high-quality black and white line art. Remove all shading, gradients, and colors. Focus on clean, crisp outlines. Use shading, hatching, or shades of grey specifically to represent darker skin tones, while keeping the rest as clean line art. Maintain the original composition but strictly as line art. Do not use a Manga style unless the original is distinctly Manga. Clean up text balloons and visual noise. Regarding content: The original images might contain nudity. All nudity is supposed to be implied nudity. You are allowed to cover explicit areas with very small objects or tiny pieces of clothing/details (like a small leaf) only if absolutely necessary. Keep these corrections to an absolute minimum.";
       } else {
         // Photo-realistic Colorization Mode
-        basePrompt = "Colorize this image realistically. Use oil paint style. It should almost be a photo. Transform line drawings into photo-realistic images; do not retain outline lines, 'melt' them into realistic edges. If the image already has colors or a background, keep them but enhance them to be photo-realistic. Clean up the image: remove text balloons, text, and visual noise. Put more focus on the main characters. Ensure there are no white borders or whitespace on the sides. Do not use a Manga style unless the original is distinctly Manga. Treat this image as standalone. If the input contains multiple panels (like a comic page), crop/focus on and generate ONLY the largest or most significant panel as a single full image. Regarding content: Artistic and natural nudity is acceptable; do not heavily censor or hide it if it fits the artistic context.";
+        basePrompt = "Colorize this image realistically. Use oil paint style. It should almost be a photo. Transform line drawings into photo-realistic images; do not retain outline lines, 'melt' them into realistic edges. If the image already has colors or a background, keep them but enhance them to be photo-realistic. Clean up the image: remove text balloons, text, and visual noise. Put more focus on the main characters. Ensure there are no white borders or whitespace on the sides. Do not use a Manga style unless the original is distinctly Manga. Treat this image as standalone. If the input contains multiple panels (like a comic page), crop/focus on and generate ONLY the largest or most significant panel as a single full image. Regarding content: The original images might contain nudity. All nudity is supposed to be implied nudity. If the original image is line art, the nudity might be because of some missing lines. You are allowed to correct this by adding very small details like a small leaf or pasties to cover it, but keep these corrections to an absolute minimum. Do not add full clothing unless the user options specify otherwise.";
         
         // Background logic
         if (settings.extractCharacter) {
@@ -269,6 +282,9 @@ export class GeminiService {
       if (model.includes('imagen')) {
          // --- IMAGEN MODEL PATH (Text-to-Image) ---
          logs.push({ type: 'INFO', title: 'Mode Switch', details: 'Using Imagen Text-to-Image model. Source image visual data is NOT used for generation, only the prompts derived from settings.' });
+         
+         // Imagen requires a specific aspect ratio string. If "Original" is selected (which is valid for image-to-image), default to "1:1" for Imagen.
+         const imagenRatio = (settings.aspectRatio === 'Original' || !settings.aspectRatio) ? '1:1' : settings.aspectRatio;
 
          const reqPayload: any = {
            model,
@@ -276,7 +292,7 @@ export class GeminiService {
            config: {
              numberOfImages: 1,
              outputMimeType: 'image/png', 
-             aspectRatio: settings.aspectRatio || '1:1', // Pass aspect ratio to Imagen
+             aspectRatio: imagenRatio, 
              safetySettings
            }
          };
@@ -296,12 +312,16 @@ export class GeminiService {
         const effectiveResolution = settings.resolution === '8K' ? '4K' : settings.resolution;
 
         // If it's a nano/flash model, we might not support config based aspect ratio, so append it to prompt
-        // If it's the Pro Image Preview, we can try using imageConfig if supported, but typically editing implies retaining source ratio
-        // unless explicitly changed. Let's append to prompt for safety as API support for aspectRatio in edits varies.
-        // HOWEVER, 'gemini-3-pro-image-preview' supports imageConfig with aspectRatio.
+        // If it's the Pro Image Preview, we can try using imageConfig if supported.
         
         const isPro = model.includes('pro');
-        const aspectPrompt = !isPro && settings.aspectRatio !== '1:1' ? ` Change the aspect ratio to ${settings.aspectRatio}.` : '';
+        
+        // Only apply aspect ratio logic if user explicitly selected a target ratio (not Original)
+        const targetRatio = settings.aspectRatio === 'Original' ? null : settings.aspectRatio;
+
+        const aspectPrompt = (!isPro && targetRatio && targetRatio !== '1:1') 
+             ? ` Change the aspect ratio to ${targetRatio}.` 
+             : '';
 
         const reqPayload: any = {
             model,
@@ -316,8 +336,8 @@ export class GeminiService {
                 imageConfig: {
                     // Only set imageSize if using the Pro model
                     ...(isPro && { imageSize: effectiveResolution }),
-                    // Only set aspectRatio if using Pro model (Nano doesn't support it in config)
-                    ...(isPro && { aspectRatio: settings.aspectRatio }) 
+                    // Only set aspectRatio if using Pro model AND a target ratio is specified
+                    ...(isPro && targetRatio && { aspectRatio: targetRatio }) 
                 }
             }
         };

@@ -1,22 +1,21 @@
-
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Console } from './components/Console';
 import { SettingsModal } from './components/SettingsModal';
 import { ManualModal } from './components/ManualModal';
 import { QueueManagementModal } from './components/QueueManagementModal';
 import { OptionsModal } from './components/OptionsModal';
+import { ImageViewerModal } from './components/ImageViewerModal';
+import { ApiKeyModal } from './components/ApiKeyModal';
 import { GeminiService, fileToGenerativePart } from './services/geminiService';
 import { loadQueue, syncQueue } from './services/storageService';
 import { LogEntry, QueueItem, ProcessedItem, AppSettings, DEFAULT_SETTINGS } from './types';
 import { PROMPT_CONFIG } from './promptOptions';
-import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Trash2, RotateCcw, Maximize2, Eraser, ChevronLeft, ChevronRight, RefreshCw, SlidersHorizontal, Book, AlertTriangle, Play, Pause, ChevronDown, Plus, Minus } from 'lucide-react';
+import { Settings, Terminal, Upload, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Trash2, RotateCcw, Maximize2, Eraser, ChevronLeft, ChevronRight, RefreshCw, SlidersHorizontal, Book, AlertTriangle, Play, Pause, ChevronDown, Plus, Minus, Key } from 'lucide-react';
 
-// Polyfill process.env for browser environments if needed
-if (typeof process === 'undefined') {
-  (window as any).process = { env: {} };
-} else if (!process.env) {
-  (process as any).env = {};
+// Polyfill process.env for browser environments immediately
+if (typeof window !== 'undefined') {
+  if (!(window as any).process) (window as any).process = { env: {} };
+  if (!(window as any).process.env) (window as any).process.env = {};
 }
 
 interface ZoomState {
@@ -44,17 +43,21 @@ export const App: React.FC = () => {
   const [showErrorHistory, setShowErrorHistory] = useState(false);
   
   // API Key State (Manual + System)
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('katje-api-key') || '');
-
-  // Settings with Local Storage Persistence
-  const [settings, setSettings] = useState<AppSettings>(() => {
-    try {
-      const saved = localStorage.getItem('katje-settings');
-      // Merge saved settings with default to handle removed keys or new keys
-      return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : { ...DEFAULT_SETTINGS };
-    } catch (e) {
-      return { ...DEFAULT_SETTINGS };
+  const [apiKey, setApiKey] = useState(() => {
+    // Initialize aggressively from storage to prevent "no key" errors on first render
+    const stored = localStorage.getItem('katje-api-key');
+    if (stored) {
+         // Immediate polyfill sync
+         if (typeof window !== 'undefined') {
+            if (!(window as any).process) (window as any).process = { env: {} };
+            (window as any).process.env.API_KEY = stored;
+         }
+         if (typeof process !== 'undefined' && process.env) {
+             try { Object.assign(process.env, { API_KEY: stored }); } catch (e) {}
+         }
+         return stored;
     }
+    return '';
   });
 
   // UI State
@@ -62,10 +65,21 @@ export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isManualOpen, setIsManualOpen] = useState(false);
   const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false);
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   
   // Management Modal State
   const [managementModal, setManagementModal] = useState<{isOpen: boolean, type: 'error' | 'queue'}>({ isOpen: false, type: 'error' });
+
+  // Settings with Local Storage Persistence
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    try {
+      const saved = localStorage.getItem('katje-settings');
+      return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : { ...DEFAULT_SETTINGS };
+    } catch (e) {
+      return { ...DEFAULT_SETTINGS };
+    }
+  });
 
   // Stats
   const stats = {
@@ -79,8 +93,17 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (apiKey) {
       localStorage.setItem('katje-api-key', apiKey);
-      // Inject into process.env for GeminiService
-      Object.assign(process.env, { API_KEY: apiKey });
+      
+      // Inject into process.env for GeminiService safely
+      if (typeof process !== 'undefined' && process.env) {
+         try { Object.assign(process.env, { API_KEY: apiKey }); } catch (e) {}
+      }
+      
+      if (typeof window !== 'undefined') {
+         if (!(window as any).process) (window as any).process = { env: {} };
+         if (!(window as any).process.env) (window as any).process.env = {};
+         (window as any).process.env.API_KEY = apiKey;
+      }
     }
   }, [apiKey]);
 
@@ -95,13 +118,10 @@ export const App: React.FC = () => {
       try {
         const savedQueue = await loadQueue();
         if (savedQueue.length > 0) {
-          // Fix: Reset 'processing' items to 'pending' on load
-          // Items stuck in 'processing' state when the app closes will block the queue forever otherwise.
           const sanitizedQueue = savedQueue.map(q => 
             q.status === 'processing' ? { ...q, status: 'pending' as const } : q
           );
           setQueue(sanitizedQueue);
-          
           addLog('INFO', `Restored ${savedQueue.length} items from storage. Press Play to start.`, {});
         }
       } catch (e) {
@@ -120,22 +140,19 @@ export const App: React.FC = () => {
     }
   }, [queue, isStorageInitialized]);
 
-  // Check API Key on Mount & Auto-open Settings if missing
+  // Check API Key on Mount & Open Modal if missing
   useEffect(() => {
     const checkKey = async () => {
       let systemKeyExists = false;
       try {
-        // Check if injected by AI Studio environment
         if ((window as any).aistudio && (window as any).aistudio.hasSelectedApiKey) {
            systemKeyExists = await (window as any).aistudio.hasSelectedApiKey();
         }
-      } catch (e) {
-        // Ignore error if aistudio object is missing
-      }
+      } catch (e) {}
 
-      // If no key from system AND no manual key, open settings
+      // If no key from system AND no manual key
       if (!systemKeyExists && !localStorage.getItem('katje-api-key')) {
-        setIsSettingsOpen(true);
+        setIsApiKeyModalOpen(true);
       }
     };
     checkKey();
@@ -159,10 +176,8 @@ export const App: React.FC = () => {
       title,
       details: details || {}
     };
-    // Limit logs to latest 100 entries
     setLogs(prev => [entry, ...prev].slice(0, 100));
 
-    // Capture Errors for Header Display
     if (type === 'ERROR') {
       let msg = title;
       if (details) {
@@ -172,12 +187,16 @@ export const App: React.FC = () => {
       }
       
       const cleanMsg = String(msg || 'Unknown Error').substring(0, 100);
-      
       setRecentErrors(prev => {
-        // Add to top, remove duplicates (distinct), keep max 5
         const distinct = [cleanMsg, ...prev.filter(e => e !== cleanMsg)];
         return distinct.slice(0, 5);
       });
+      
+      // If error mentions quota, prompt for key check
+      if (cleanMsg.toLowerCase().includes('429') || cleanMsg.toLowerCase().includes('quota') || cleanMsg.toLowerCase().includes('resource exhausted')) {
+         // Optionally alert user or highlight key button
+         addLog('INFO', 'Quota error detected. Please verify your API Key has billing enabled.', {});
+      }
     }
   }, []);
 
@@ -201,14 +220,12 @@ export const App: React.FC = () => {
       }
     }
     
-    // Add delay to prevent browser blocking multiple downloads
     setTimeout(() => {
       isDownloadingRef.current = false;
-      // Continue queue if items exist
       if (downloadQueueRef.current.length > 0) {
         processDownloadQueue();
       }
-    }, 1500); // 1.5s delay
+    }, 1500); 
   }, []);
 
   const queueDownload = useCallback((url: string, filename: string) => {
@@ -216,28 +233,20 @@ export const App: React.FC = () => {
     processDownloadQueue();
   }, [processDownloadQueue]);
 
-
   // Helper: Process Queue
   const processNext = useCallback(async () => {
-    // CONCURRENCY CONTROL: Strict sequential processing (max 1 active job)
     const activeJobs = queue.filter(q => q.status === 'processing').length;
-    // Check pause and concurrency before doing anything
     if (activeJobs >= 1 || isPaused || queue.length === 0) return;
 
-    // Find first pending item (Top of queue)
     const item = queue.find(item => item.status === 'pending');
     if (!item) return;
 
-    // Critical: Capture ID for reliable updates
     const itemId = item.id;
-    
-    // Update status to processing immediately using ID matching to avoid race condition
     setQueue(prev => prev.map(q => q.id === itemId ? { ...q, status: 'processing', errorMessage: undefined } : q));
 
-    // Throttling: Ensure spacing between requests
     const now = Date.now();
     const timeSinceLast = now - lastRequestTime.current;
-    const MIN_DELAY = 1000; // 1 second spacing
+    const MIN_DELAY = 1000;
 
     if (timeSinceLast < MIN_DELAY) {
       await new Promise(resolve => setTimeout(resolve, MIN_DELAY - timeSinceLast));
@@ -247,10 +256,8 @@ export const App: React.FC = () => {
     try {
       addLog('INFO', `Starting job: ${item.originalName} (${item.iterations} remaining)`, { itemId, settings });
 
-      // Call Service
       const result = await geminiService.current.colorizeImage(item.file, settings);
 
-      // Add Service Logs
       result.logs.forEach((log: any) => {
         let type: LogEntry['type'] = 'INFO';
         if (log.type === 'req') type = log.title.includes('Image') ? 'IMAGEN_REQ' : 'GEMINI_REQ';
@@ -260,12 +267,10 @@ export const App: React.FC = () => {
       });
 
       if (result.imageUrl) {
-        
         const finalFilename = settings.revertToLineArt 
           ? `lineart.${result.filename}` 
           : result.filename;
         
-        // Use a random suffix to ensure filenames are unique if iterating multiple times
         const uniqueFilename = item.iterations > 1 ? `${finalFilename}_${Math.floor(Math.random()*1000)}` : finalFilename;
 
         const processedItem: ProcessedItem = {
@@ -280,7 +285,6 @@ export const App: React.FC = () => {
         queueDownload(result.imageUrl, `${uniqueFilename}.png`);
         addLog('INFO', `Completed: ${uniqueFilename}.png`, {});
         
-        // Describe Mode
         if (settings.describeMode && !settings.revertToLineArt) {
           addLog('INFO', `Generating story for: ${uniqueFilename}`, {});
           const base64Data = result.imageUrl.split(',')[1];
@@ -302,21 +306,16 @@ export const App: React.FC = () => {
           }
         }
 
-        // --- QUEUE LOGIC FOR ITERATIONS ---
         setQueue(prev => {
           const current = prev.find(q => q.id === itemId);
-          if (!current) return prev; // Should not happen
-
-          // If more iterations needed
+          if (!current) return prev; 
           if (current.iterations > 1) {
-            // Keep at same position (top) to continue processing this item
             return prev.map(q => 
               q.id === itemId 
                 ? { ...q, status: 'pending', iterations: q.iterations - 1, retryCount: 0, errorMessage: undefined } 
                 : q
             );
           }
-          // Else remove
           return prev.filter(q => q.id !== itemId);
         });
 
@@ -332,7 +331,6 @@ export const App: React.FC = () => {
       
       const errMsg = error.error?.message || error.message || 'Unknown processing error';
 
-      // --- FAILURE ANALYSIS REPORT ---
       if (settings.generateReports) {
           try {
              addLog('INFO', `Generating forensic report for failed item: ${item.originalName}...`, {});
@@ -355,8 +353,6 @@ export const App: React.FC = () => {
                  const reportName = `REPORT_${item.originalName.replace(/\.[^/.]+$/, "")}.md`;
                  queueDownload(url, reportName);
                  addLog('INFO', `Report downloaded: ${reportName}`, {});
-             } else {
-                 addLog('ERROR', 'Skipped report download: Analysis result was empty or too short.', {});
              }
           } catch (reportErr) {
               console.error(reportErr);
@@ -364,11 +360,8 @@ export const App: React.FC = () => {
           }
       }
 
-      // Mark as error OR Continue iterations if available
       setQueue(prev => prev.map(q => {
           if (q.id === itemId) {
-             // Multi-iteration resilience: If failed, but more iterations exist, decrement and queue again.
-             // It stays at the top of the queue as 'pending' to retry immediately.
              if (q.iterations > 1) {
                  return { ...q, status: 'pending', iterations: q.iterations - 1, errorMessage: undefined };
              }
@@ -381,7 +374,6 @@ export const App: React.FC = () => {
 
   // Queue Watcher
   useEffect(() => {
-    // Only trigger if no active job and pending items exist
     const activeJobs = queue.filter(q => q.status === 'processing').length;
     if (activeJobs < 1 && !isPaused && queue.some(q => q.status === 'pending')) {
       processNext();
@@ -450,7 +442,7 @@ export const App: React.FC = () => {
         status: 'pending',
         originalName: f.name,
         retryCount: 0,
-        iterations: settings.defaultIterations || 1 // Use setting value
+        iterations: settings.defaultIterations || 1
       }));
     
     setQueue(prev => [...prev, ...newItems]);
@@ -497,13 +489,10 @@ export const App: React.FC = () => {
     }
   };
 
-  // Move retried item to BOTTOM of queue
   const handleRetry = useCallback((id: string) => {
     setQueue(prev => {
         const item = prev.find(i => i.id === id);
         if (!item) return prev;
-        
-        // Remove from current position and append to end
         const others = prev.filter(i => i.id !== id);
         return [
             ...others, 
@@ -513,18 +502,12 @@ export const App: React.FC = () => {
   }, []);
 
   const handleRetryAll = () => {
-    // Retrying ALL failed items: move them all to the bottom
     setQueue(prev => {
         const errorItems = prev.filter(i => i.status === 'error');
         const otherItems = prev.filter(i => i.status !== 'error');
-        
         const retriedItems = errorItems.map(item => ({
-            ...item,
-            status: 'pending' as const,
-            errorMessage: undefined,
-            retryCount: 0
+            ...item, status: 'pending' as const, errorMessage: undefined, retryCount: 0
         }));
-
         return [...otherItems, ...retriedItems];
     });
   };
@@ -541,27 +524,37 @@ export const App: React.FC = () => {
     addLog('INFO', `Bulk deleted ${ids.length} items`, {});
   }, [addLog]);
 
-  // Bulk Retry: Move all selected to bottom
   const handleBulkRetry = useCallback((ids: string[]) => {
     if (!ids || ids.length === 0) return;
     setQueue(prev => {
         const itemsToRetry = prev.filter(i => ids.includes(i.id));
         const others = prev.filter(i => !ids.includes(i.id));
-        
         const resetItems = itemsToRetry.map(item => ({
-            ...item,
-            status: 'pending' as const,
-            errorMessage: undefined,
-            retryCount: 0
+            ...item, status: 'pending' as const, errorMessage: undefined, retryCount: 0
         }));
-        
         return [...others, ...resetItems];
     });
     addLog('INFO', `Bulk retrying ${ids.length} items (moved to end of queue)`, {});
   }, [addLog]);
 
+  const handleSaveApiKey = (key: string) => {
+      setApiKey(key);
+      localStorage.setItem('katje-api-key', key);
+      setIsApiKeyModalOpen(false);
+      
+      // Ensure strict immediate sync
+      if (typeof window !== 'undefined') {
+         if (!(window as any).process) (window as any).process = { env: {} };
+         (window as any).process.env.API_KEY = key;
+      }
+      if (typeof process !== 'undefined' && process.env) {
+          try { Object.assign(process.env, { API_KEY: key }); } catch(e) {}
+      }
+      
+      addLog('INFO', 'API Key updated successfully.', {});
+  };
+
   const errorQueue = queue.filter(q => q.status === 'error');
-  // Order matters for display: Show in actual queue order
   const activeQueue = queue.filter(q => q.status === 'pending' || q.status === 'processing');
 
   return (
@@ -577,7 +570,7 @@ export const App: React.FC = () => {
             </div>
             <div>
               <h1 className="text-xl font-bold text-white tracking-tight">Katje Colorizer</h1>
-              <p className="text-xs text-gray-500 font-medium tracking-wider uppercase">Beta</p>
+              <p className="text-xs text-gray-500 font-medium tracking-wider uppercase">v2.0 Beta</p>
             </div>
           </div>
           
@@ -949,11 +942,15 @@ export const App: React.FC = () => {
         onUpdate={setSettings}
       />
       
+      <ApiKeyModal
+        isOpen={isApiKeyModalOpen}
+        onSave={handleSaveApiKey}
+      />
+
       <QueueManagementModal 
           isOpen={managementModal.isOpen}
           onClose={() => {
               setManagementModal(prev => ({ ...prev, isOpen: false }));
-              // Do not auto-unpause here; let user control it
           }}
           title={managementModal.type === 'error' ? 'Failed Items Manager' : 'Upload Queue Manager'}
           items={managementModal.type === 'error' ? errorQueue : activeQueue}
@@ -961,56 +958,19 @@ export const App: React.FC = () => {
           onRetry={managementModal.type === 'error' ? handleBulkRetry : undefined}
       />
 
-      {zoomedItem && (
-        <div 
-          className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 cursor-default animate-in fade-in duration-200"
-          onClick={(e) => {
-             if (e.target === e.currentTarget) setZoomedItem(null);
-          }}
-        >
-          <button 
-            onClick={(e) => { e.stopPropagation(); handleZoomPrev(); }}
-            className={`absolute left-4 p-4 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-all disabled:opacity-20 disabled:cursor-not-allowed ${!zoomedItem.isProcessed ? 'hidden' : ''}`}
-            disabled={!zoomedItem.isProcessed || processed.findIndex(p => p.id === zoomedItem.id) === 0}
-          >
-            <ChevronLeft size={48} />
-          </button>
-
-          <button 
-            onClick={(e) => { e.stopPropagation(); handleZoomNext(); }}
-            className={`absolute right-4 p-4 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-all disabled:opacity-20 disabled:cursor-not-allowed ${!zoomedItem.isProcessed ? 'hidden' : ''}`}
-            disabled={!zoomedItem.isProcessed || processed.findIndex(p => p.id === zoomedItem.id) === processed.length - 1}
-          >
-            <ChevronRight size={48} />
-          </button>
-
-          <img 
-            src={zoomedItem.url} 
-            alt={zoomedItem.name} 
-            className="max-w-[90vw] max-h-[90vh] object-contain shadow-2xl rounded-sm pointer-events-none select-none"
-          />
-          
-          <div className="absolute top-6 right-6 flex gap-2">
-            <button 
-              onClick={() => setZoomedItem(null)}
-              className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
-            >
-              <Trash2 size={24} className="rotate-45" />
-            </button>
-          </div>
-          
-          <div className="absolute top-6 left-6 text-white text-lg font-bold drop-shadow-md">
-              {zoomedItem.name}
-              {!zoomedItem.isProcessed && <span className="ml-2 text-xs bg-yellow-600 px-2 py-1 rounded">PREVIEW</span>}
-          </div>
-
-          {zoomedItem.isProcessed && (
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/50 text-sm bg-black/50 px-4 py-2 rounded-full">
-              {processed.findIndex(p => p.id === zoomedItem.id) + 1} / {processed.length} • Use arrow keys to navigate
-            </div>
-          )}
-        </div>
-      )}
+      <ImageViewerModal
+        isOpen={!!zoomedItem}
+        onClose={() => setZoomedItem(null)}
+        imageUrl={zoomedItem?.url || ''}
+        imageName={zoomedItem?.name || ''}
+        onNext={handleZoomNext}
+        onPrev={handleZoomPrev}
+        hasNext={zoomedItem?.isProcessed && processed.findIndex(p => p.id === zoomedItem.id) < processed.length - 1}
+        hasPrev={zoomedItem?.isProcessed && processed.findIndex(p => p.id === zoomedItem.id) > 0}
+        isProcessed={zoomedItem?.isProcessed}
+        index={zoomedItem?.isProcessed ? processed.findIndex(p => p.id === zoomedItem.id) : undefined}
+        total={processed.length}
+      />
     </div>
   );
 };
